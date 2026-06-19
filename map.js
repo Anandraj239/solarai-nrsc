@@ -18,16 +18,16 @@ function initMap() {
 
   // ─── BASE LAYERS ────────────────────────────────────────────────────────────
   // Light professional basemap (similar to Bhuvan/NRSC aesthetic)
-  const baseLight = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+  _layers.baseLight = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
     attribution: '&copy; <a href="https://carto.com/">CARTO</a> | SolarAI NRSC/ISRO',
     maxZoom: 19, subdomains: 'abcd'
   }).addTo(_map);
 
-  const baseDark = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+  _layers.baseDark = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
     attribution: '&copy; <a href="https://carto.com/">CARTO</a>',
     maxZoom: 19, subdomains: 'abcd'
   });
-  const baseSatellite = L.tileLayer(
+  _layers.baseSatellite = L.tileLayer(
     'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
     { attribution: 'Tiles © Esri — NASA, USGS, NGA, EPA', maxZoom: 18 }
   );
@@ -73,9 +73,6 @@ function initMap() {
   _layers.grid = L.layerGroup();
   renderGridLines();
 
-  // Store base layers for toolbar
-  _layers.baseDark = baseDark;
-  _layers.baseSatellite = baseSatellite;
 
   // ─── MAP EVENTS ─────────────────────────────────────────────────────────────
   _map.on('click', () => {
