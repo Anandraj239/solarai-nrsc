@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="SolarAI — NRSC/ISRO Geospatial AI System for Solar Farm Detection and Site Suitability Analysis across India using Sentinel-2, SegFormer, and multi-criteria decision analysis.">
+  <meta name="keywords" content="NRSC ISRO solar energy GIS satellite India Sentinel-2 SegFormer U-Net machine learning remote sensing">
+  <meta name="author" content="National Remote Sensing Centre, ISRO, Government of India">
+  <meta property="og:title" content="SolarAI — NRSC/ISRO Solar Intelligence Platform">
+  <meta property="og:description" content="AI-powered geospatial platform for solar farm detection and site suitability analysis across India">
+  <title>SolarAI — NRSC · ISRO · Department of Space · Government of India</title>
+
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans:wght@400;500;600;700&family=Roboto+Mono:wght@400;500&display=swap">
+
+  <!-- App Styles -->
+  <link rel="stylesheet" href="style.css">
+
+  <!-- Favicon: solar emoji -->
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>☀️</text></svg>">
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     LOADING SCREEN
+     ═══════════════════════════════════════════════════════════════ -->
+<div id="loading-screen">
+  <svg width="80" height="80" viewBox="0 0 80 80" style="margin-bottom:8px;">
+    <!-- ISRO-inspired concentric orbit emblem -->
+    <circle cx="40" cy="40" r="36" fill="none" stroke="rgba(245,158,11,0.2)" stroke-width="1"/>
+    <circle cx="40" cy="40" r="28" fill="none" stroke="rgba(29,111,164,0.3)" stroke-width="1" stroke-dasharray="4,3"/>
+    <circle cx="40" cy="40" r="20" fill="none" stroke="rgba(245,158,11,0.4)" stroke-width="1.5"/>
+    <!-- Orbit ellipse -->
+    <ellipse cx="40" cy="40" rx="36" ry="14" fill="none" stroke="rgba(6,182,212,0.5)" stroke-width="1.5"
+             transform="rotate(-30 40 40)" stroke-dasharray="3,3"/>
+    <!-- Satellite dot -->
+    <circle cx="74" cy="32" r="3" fill="#06b6d4" style="animation:pulse-dot 1.8s infinite;"/>
+    <!-- Sun center -->
+    <circle cx="40" cy="40" r="8" fill="#f59e0b" opacity="0.9"/>
+    <circle cx="40" cy="40" r="5" fill="#fbbf24"/>
+    <!-- Rays -->
+    <g stroke="#f59e0b" stroke-width="1.5" opacity="0.6">
+      <line x1="40" y1="28" x2="40" y2="22"/>
+      <line x1="40" y1="52" x2="40" y2="58"/>
+      <line x1="28" y1="40" x2="22" y2="40"/>
+      <line x1="52" y1="40" x2="58" y2="40"/>
+      <line x1="31.5" y1="31.5" x2="27" y2="27"/>
+      <line x1="48.5" y1="48.5" x2="53" y2="53"/>
+      <line x1="48.5" y1="31.5" x2="53" y2="27"/>
+      <line x1="31.5" y1="48.5" x2="27" y2="53"/>
+    </g>
+  </svg>
+  <div class="load-logo">Solar<span>AI</span></div>
+  <div class="load-subtitle">NATIONAL REMOTE SENSING CENTRE · ISRO<br>DEPARTMENT OF SPACE · GOVERNMENT OF INDIA</div>
+  <div class="load-bar-wrap">
+    <div class="load-bar"><div class="load-bar-fill"></div></div>
+  </div>
+  <div class="load-status" id="load-status">Initializing geospatial engine...</div>
+
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     TOP NAVIGATION BAR
+     ═══════════════════════════════════════════════════════════════ -->
+<nav id="navbar"></nav>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     APP SHELL — 3-column layout
+     ═══════════════════════════════════════════════════════════════ -->
+<div id="app-shell">
+
+  <!-- LEFT SIDEBAR — AI Control Panel -->
+  <aside id="sidebar-left"></aside>
+
+  <!-- CENTER — Map + Bottom Panel -->
+  <main id="center-panel"></main>
+
+  <!-- RIGHT SIDEBAR — Analytics -->
+  <aside id="sidebar-right"></aside>
+
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     TAB CONTENT OVERLAYS (rendered but hidden until tab switch)
+     ═══════════════════════════════════════════════════════════════ -->
+
+<!-- Suitability Tab -->
+<div id="tab-suitability" class="tab-content" style="top:58px;"></div>
+
+<!-- Change Detection Tab -->
+<div id="tab-change" class="tab-content" style="top:58px;"></div>
+
+<!-- Reports Tab -->
+<div id="tab-reports" class="tab-content" style="top:58px;"></div>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     SCRIPTS (CDN Libraries)
+     ═══════════════════════════════════════════════════════════════ -->
+
+<!-- Leaflet JS -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+
+<!-- Turf.js (GeoJSON area/centroid calculations) -->
+<script src="https://cdn.jsdelivr.net/npm/@turf/turf@6.5.0/turf.min.js"></script>
+
+<!-- App Modules -->
+<script src="data.js"></script>
+<script src="charts.js"></script>
+<script src="map.js"></script>
+<script src="app.js"></script>
+
+
+
+
+<!-- Pulse ring keyframe (injected for marker icons) -->
+<style>
+@keyframes pulse-ring {
+  0%  { width:8px;height:8px;opacity:0.7;margin:-4px 0 0 -4px; }
+  100%{ width:40px;height:40px;opacity:0;margin:-20px 0 0 -20px; }
+}
+</style>
+
+</body>
+</html>

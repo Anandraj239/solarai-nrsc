@@ -3,130 +3,333 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="SolarAI — NRSC/ISRO Geospatial AI System for Solar Farm Detection and Site Suitability Analysis across India using Sentinel-2, SegFormer, and multi-criteria decision analysis.">
-  <meta name="keywords" content="NRSC ISRO solar energy GIS satellite India Sentinel-2 SegFormer U-Net machine learning remote sensing">
-  <meta name="author" content="National Remote Sensing Centre, ISRO, Government of India">
-  <meta property="og:title" content="SolarAI — NRSC/ISRO Solar Intelligence Platform">
-  <meta property="og:description" content="AI-powered geospatial platform for solar farm detection and site suitability analysis across India">
-  <title>SolarAI — NRSC · ISRO · Department of Space · Government of India</title>
-
-  <!-- Leaflet CSS -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-
-  <!-- Google Fonts -->
+  <title>Solar Farm Mapping Using Satellite Imagery — NRSC/ISRO Internship 2024</title>
+  <meta name="description" content="Detection of utility-scale solar farms across India using Sentinel-2 imagery and SegFormer deep learning model. NRSC/ISRO internship project, 2024.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans:wght@400;500;600;700&family=Roboto+Mono:wght@400;500&display=swap">
+  <link href="https://fonts.googleapis.com/css2?family=Merriweather:ital,wght@0,400;0,700;1,400&family=Merriweather+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --orange:    #F26522;
+      --navy:      #003087;
+      --bg:        #faf9f7;
+      --bg-warm:   #f4f0eb;
+      --text:      #1c1c1c;
+      --text-mid:  #444;
+      --text-muted:#777;
+      --border:    #d8d0c8;
+      --max-w:     860px;
+    }
+    html { font-size: 16px; scroll-behavior: smooth; }
+    body { font-family: 'Merriweather Sans', Georgia, system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.7; }
 
-  <!-- App Styles -->
-  <link rel="stylesheet" href="style.css">
+    /* Top Banner */
+    #top-banner { background: var(--navy); color: #fff; padding: 9px 24px; display: flex; align-items: center; gap: 14px; font-size: 0.8rem; }
+    .banner-emblem { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+    .banner-emblem svg { width: 30px; height: 30px; }
+    .banner-org { font-weight: 600; letter-spacing: 0.5px; }
+    .banner-dept { opacity: 0.8; font-size: 0.74rem; }
+    .banner-sep { opacity: 0.35; margin: 0 4px; }
+    .banner-right { margin-left: auto; }
+    .dashboard-link { background: var(--orange); color: #fff; text-decoration: none; padding: 5px 14px; border-radius: 3px; font-size: 0.75rem; font-weight: 600; }
+    .dashboard-link:hover { background: #d4571e; }
 
-  <!-- Favicon: solar emoji -->
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>☀️</text></svg>">
+    /* Layout */
+    .page-wrap { max-width: var(--max-w); margin: 0 auto; padding: 0 24px; }
+
+    /* Hero */
+    #hero { padding: 48px 0 36px; border-bottom: 2px solid var(--orange); }
+    .hero-label { font-size: 0.72rem; font-weight: 600; letter-spacing: 1.5px; text-transform: uppercase; color: var(--orange); margin-bottom: 12px; }
+    .hero-title { font-family: 'Merriweather', Georgia, serif; font-size: 1.95rem; font-weight: 700; line-height: 1.3; color: var(--navy); margin-bottom: 10px; max-width: 700px; }
+    .hero-subtitle { font-size: 1rem; color: var(--text-mid); margin-bottom: 22px; font-style: italic; }
+    .hero-meta { display: flex; flex-wrap: wrap; gap: 6px 20px; font-size: 0.8rem; color: var(--text-muted); margin-bottom: 26px; }
+    .hero-meta strong { color: var(--text-mid); }
+    .hero-image-wrap { position: relative; }
+    .hero-img { width: 100%; max-height: 370px; object-fit: cover; display: block; border: 1px solid var(--border); }
+    .annotation-svg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+    .img-caption { font-size: 0.72rem; color: var(--text-muted); margin-top: 6px; font-style: italic; }
+
+    /* Section */
+    section { padding: 40px 0; border-bottom: 1px solid var(--border); }
+    h2.sh { font-family: 'Merriweather', Georgia, serif; font-size: 1.25rem; font-weight: 700; color: var(--navy); margin-bottom: 18px; padding-bottom: 8px; border-bottom: 2px solid var(--bg-warm); display: inline-block; }
+    h2.sh span { border-bottom: 2px solid var(--orange); padding-bottom: 8px; }
+
+    /* About */
+    #about p { font-size: 0.97rem; color: var(--text-mid); margin-bottom: 14px; max-width: 720px; }
+    #about p strong { color: var(--text); }
+    .intern-card { background: var(--bg-warm); border-left: 4px solid var(--navy); padding: 14px 18px; margin-top: 20px; display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; font-size: 0.82rem; }
+    .ic-label { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.8px; color: var(--text-muted); }
+    .ic-val { color: var(--text); font-weight: 600; }
+
+    /* Methodology */
+    #methodology ol { list-style: none; counter-reset: mc; }
+    #methodology ol li { counter-increment: mc; display: flex; gap: 0; position: relative; }
+    #methodology ol li::before { content: counter(mc); font-family: 'Merriweather', serif; font-size: 1.55rem; font-weight: 700; color: var(--orange); width: 44px; flex-shrink: 0; line-height: 1.2; padding-top: 2px; }
+    #methodology ol li:not(:last-child)::after { content: ''; position: absolute; left: 18px; top: 36px; bottom: -8px; width: 1px; background: var(--border); }
+    .mb { padding: 2px 0 24px; }
+    .mn { font-weight: 600; font-size: 0.95rem; color: var(--text); margin-bottom: 4px; }
+    .md { font-size: 0.87rem; color: var(--text-mid); max-width: 610px; }
+    .mdt { font-size: 0.76rem; color: var(--text-muted); margin-top: 4px; font-style: italic; }
+
+    /* Results */
+    .results-intro { font-size: 0.95rem; color: var(--text-mid); margin-bottom: 22px; max-width: 680px; }
+    .comp-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 26px; }
+    @media (max-width: 580px) { .comp-grid { grid-template-columns: 1fr; } .hero-title { font-size: 1.4rem; } }
+    .comp-label { font-size: 0.67rem; font-weight: 600; letter-spacing: 0.8px; text-transform: uppercase; color: var(--text-muted); margin-bottom: 6px; }
+    .comp-img { width: 100%; aspect-ratio: 1/1; object-fit: cover; display: block; border: 1px solid var(--border); }
+    .comp-rel { position: relative; }
+
+    /* Table */
+    .acc-table { width: 100%; border-collapse: collapse; font-size: 0.84rem; margin-top: 8px; margin-bottom: 6px; }
+    .acc-table thead th { text-align: left; padding: 8px 13px; background: var(--navy); color: #fff; font-weight: 600; font-size: 0.77rem; }
+    .acc-table tbody tr:nth-child(even) { background: var(--bg-warm); }
+    .acc-table tbody td { padding: 7px 13px; border-bottom: 1px solid var(--border); color: var(--text-mid); }
+    .acc-table tbody td:first-child { color: var(--text); font-weight: 500; }
+    .av { font-family: 'Courier New', monospace; font-weight: 700; color: var(--navy); }
+    .acc-note { font-size: 0.72rem; color: var(--text-muted); font-style: italic; margin-top: 6px; }
+
+    /* Observations */
+    .obs { font-size: 0.91rem; color: var(--text-mid); margin-bottom: 12px; padding-left: 16px; border-left: 3px solid var(--border); }
+    .obs strong { color: var(--text); }
+
+    /* Tech */
+    .tech-intro { font-size: 0.9rem; color: var(--text-mid); margin-bottom: 13px; }
+    .badges { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 16px; }
+    .badge { padding: 4px 11px; background: var(--bg-warm); border: 1px solid var(--border); border-radius: 3px; font-size: 0.79rem; color: var(--text-mid); font-family: 'Courier New', monospace; }
+    .badge.hi { border-color: var(--navy); color: var(--navy); background: #eef2ff; }
+    .ds-note { background: var(--bg-warm); border: 1px solid var(--border); border-left: 4px solid var(--orange); padding: 12px 16px; font-size: 0.82rem; color: var(--text-mid); line-height: 1.7; margin-top: 12px; }
+
+    /* Limitations */
+    #limitations ul { list-style: disc; padding-left: 22px; font-size: 0.9rem; color: var(--text-mid); display: flex; flex-direction: column; gap: 8px; }
+    #limitations ul li strong { color: var(--text); }
+
+    /* Footer */
+    footer { background: var(--navy); color: rgba(255,255,255,0.85); padding: 28px 24px; margin-top: 10px; }
+    .footer-inner { max-width: var(--max-w); margin: 0 auto; display: grid; grid-template-columns: 1fr auto; gap: 16px; align-items: start; }
+    .fi { font-size: 0.82rem; line-height: 1.9; }
+    .fi strong { color: #fff; }
+    .fi .roll { color: rgba(255,255,255,0.5); font-size: 0.74rem; }
+    .fi .nrsc { font-weight: 700; color: var(--orange); font-size: 0.85rem; }
+    .fr { text-align: right; font-size: 0.74rem; color: rgba(255,255,255,0.5); }
+  </style>
 </head>
 <body>
 
-<!-- ═══════════════════════════════════════════════════════════════
-     LOADING SCREEN
-     ═══════════════════════════════════════════════════════════════ -->
-<div id="loading-screen">
-  <svg width="80" height="80" viewBox="0 0 80 80" style="margin-bottom:8px;">
-    <!-- ISRO-inspired concentric orbit emblem -->
-    <circle cx="40" cy="40" r="36" fill="none" stroke="rgba(245,158,11,0.2)" stroke-width="1"/>
-    <circle cx="40" cy="40" r="28" fill="none" stroke="rgba(29,111,164,0.3)" stroke-width="1" stroke-dasharray="4,3"/>
-    <circle cx="40" cy="40" r="20" fill="none" stroke="rgba(245,158,11,0.4)" stroke-width="1.5"/>
-    <!-- Orbit ellipse -->
-    <ellipse cx="40" cy="40" rx="36" ry="14" fill="none" stroke="rgba(6,182,212,0.5)" stroke-width="1.5"
-             transform="rotate(-30 40 40)" stroke-dasharray="3,3"/>
-    <!-- Satellite dot -->
-    <circle cx="74" cy="32" r="3" fill="#06b6d4" style="animation:pulse-dot 1.8s infinite;"/>
-    <!-- Sun center -->
-    <circle cx="40" cy="40" r="8" fill="#f59e0b" opacity="0.9"/>
-    <circle cx="40" cy="40" r="5" fill="#fbbf24"/>
-    <!-- Rays -->
-    <g stroke="#f59e0b" stroke-width="1.5" opacity="0.6">
-      <line x1="40" y1="28" x2="40" y2="22"/>
-      <line x1="40" y1="52" x2="40" y2="58"/>
-      <line x1="28" y1="40" x2="22" y2="40"/>
-      <line x1="52" y1="40" x2="58" y2="40"/>
-      <line x1="31.5" y1="31.5" x2="27" y2="27"/>
-      <line x1="48.5" y1="48.5" x2="53" y2="53"/>
-      <line x1="48.5" y1="31.5" x2="53" y2="27"/>
-      <line x1="31.5" y1="48.5" x2="27" y2="53"/>
-    </g>
-  </svg>
-  <div class="load-logo">Solar<span>AI</span></div>
-  <div class="load-subtitle">NATIONAL REMOTE SENSING CENTRE · ISRO<br>DEPARTMENT OF SPACE · GOVERNMENT OF INDIA</div>
-  <div class="load-bar-wrap">
-    <div class="load-bar"><div class="load-bar-fill"></div></div>
+<!-- Top Banner -->
+<div id="top-banner">
+  <div class="banner-emblem">
+    <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="16" cy="16" r="13" stroke="rgba(242,101,34,0.7)" stroke-width="1.2"/>
+      <ellipse cx="16" cy="16" rx="13" ry="5" stroke="rgba(255,255,255,0.4)" stroke-width="1"
+               transform="rotate(-30 16 16)" stroke-dasharray="3,2"/>
+      <circle cx="16" cy="16" r="4" fill="#F26522"/>
+      <circle cx="16" cy="16" r="2" fill="#fff"/>
+      <circle cx="25" cy="8" r="1.5" fill="#fff" opacity="0.7"/>
+    </svg>
+    <span class="banner-org">NRSC / ISRO</span>
   </div>
-  <div class="load-status" id="load-status">Initializing geospatial engine...</div>
-
+  <span class="banner-sep">|</span>
+  <span class="banner-dept">National Remote Sensing Centre &nbsp;·&nbsp; Department of Space, Government of India</span>
+  <div class="banner-right">
+    <a href="dashboard.html" class="dashboard-link">→ Open Interactive Map</a>
+  </div>
 </div>
 
-<!-- ═══════════════════════════════════════════════════════════════
-     TOP NAVIGATION BAR
-     ═══════════════════════════════════════════════════════════════ -->
-<nav id="navbar"></nav>
+<div class="page-wrap">
 
-<!-- ═══════════════════════════════════════════════════════════════
-     APP SHELL — 3-column layout
-     ═══════════════════════════════════════════════════════════════ -->
-<div id="app-shell">
+  <!-- Hero -->
+  <section id="hero">
+    <div class="hero-label">Internship Project Report &nbsp;·&nbsp; NRSC, Hyderabad &nbsp;·&nbsp; 2024</div>
+    <h1 class="hero-title">Mapping Solar Farms Across India Using Satellite Imagery and Deep Learning</h1>
+    <p class="hero-subtitle">Automated detection of utility-scale photovoltaic installations from Sentinel-2 multispectral imagery</p>
+    <div class="hero-meta">
+      <span>📍 <strong>NRSC, Hyderabad</strong></span>
+      <span>🗓 <strong>May – July 2024</strong></span>
+      <span>🛰 <strong>Sentinel-2, 10 m resolution</strong></span>
+      <span>🤖 <strong>SegFormer-B5 semantic segmentation</strong></span>
+    </div>
+    <div class="hero-image-wrap">
+      <img src="satellite.png" class="hero-img" alt="Sentinel-2 imagery of Jaisalmer solar farm, Rajasthan">
+      <!-- Hand-annotated SVG overlay -->
+      <svg class="annotation-svg" viewBox="0 0 860 370" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <marker id="ah1" markerWidth="8" markerHeight="6" refX="6" refY="3" orient="auto">
+            <polygon points="0 0,8 3,0 6" fill="#F26522"/>
+          </marker>
+          <marker id="ah2" markerWidth="8" markerHeight="6" refX="6" refY="3" orient="auto">
+            <polygon points="0 0,8 3,0 6" fill="#003087"/>
+          </marker>
+        </defs>
+        <path d="M152 76 C162 90,168 105,175 118" stroke="#F26522" stroke-width="2.3" fill="none" marker-end="url(#ah1)" stroke-linecap="round"/>
+        <g transform="rotate(-2,78,62)">
+          <rect x="32" y="48" width="118" height="26" rx="3" fill="rgba(255,255,255,0.9)" stroke="#F26522" stroke-width="1.2"/>
+          <text x="40" y="66" font-family="Georgia,serif" font-size="13" fill="#003087" font-weight="bold">Solar array cluster</text>
+        </g>
+        <path d="M625 242 C613 232,600 222,588 212" stroke="#003087" stroke-width="2" fill="none" marker-end="url(#ah2)" stroke-linecap="round"/>
+        <g transform="rotate(1.5,633,256)">
+          <rect x="583" y="245" width="100" height="23" rx="3" fill="rgba(255,255,255,0.9)" stroke="#003087" stroke-width="1"/>
+          <text x="591" y="261" font-family="Georgia,serif" font-size="12" fill="#003087">Access road</text>
+        </g>
+      </svg>
+      <p class="img-caption">Fig. 1 — Sentinel-2 true-colour composite (Band 4-3-2), Jaisalmer district, Rajasthan. Acquired June 2024. Annotations added manually during field validation.</p>
+    </div>
+  </section>
 
-  <!-- LEFT SIDEBAR — AI Control Panel -->
-  <aside id="sidebar-left"></aside>
+  <!-- About -->
+  <section id="about">
+    <h2 class="sh"><span>About This Project</span></h2>
+    <p>This project was developed during my summer internship at the <strong>National Remote Sensing Centre (NRSC), Hyderabad</strong>, under the guidance of my mentor from the Land Use and Land Cover division. The objective was to build an automated pipeline to detect and map utility-scale solar installations across India using freely available satellite data.</p>
+    <p>I used <strong>Sentinel-2 Level-2A imagery</strong> sourced from ESA's Copernicus Open Access Hub and trained a <strong>SegFormer-B5</strong> transformer-based segmentation model on the Microsoft AI4Earth Solar Farm India dataset (Ortiz et al., 2022). Most of my ground-truthing and validation work focused on Rajasthan and Gujarat, which together account for nearly 60% of India's installed solar capacity.</p>
+    <p>The interactive map linked in the header shows the model's detections on a national scale, with popup metadata for each detected farm. This page documents the methodology, training setup, and key results from the internship period.</p>
+    <div class="intern-card">
+      <div><div class="ic-label">Student</div><div class="ic-val">Anandraj</div></div>
+      <div><div class="ic-label">Programme</div><div class="ic-val">B.Tech (Final Year)</div></div>
+      <div><div class="ic-label">Host Organisation</div><div class="ic-val">NRSC, Hyderabad</div></div>
+      <div><div class="ic-label">Period</div><div class="ic-val">May – July 2024</div></div>
+      <div><div class="ic-label">Guide</div><div class="ic-val">Scientist/Engineer, LULC Division</div></div>
+    </div>
+  </section>
 
-  <!-- CENTER — Map + Bottom Panel -->
-  <main id="center-panel"></main>
+  <!-- Methodology -->
+  <section id="methodology">
+    <h2 class="sh"><span>Methodology</span></h2>
+    <ol>
+      <li>
+        <div class="mb">
+          <div class="mn">Data Collection</div>
+          <div class="md">Downloaded cloud-free Sentinel-2 L2A tiles (10 m resolution) covering Rajasthan, Gujarat, Tamil Nadu, Karnataka, and Andhra Pradesh from the Copernicus Hub. Selected scenes from the dry season (Oct–Mar) to minimise cloud cover and vegetation interference with panel reflectance.</div>
+          <div class="mdt">~340 tiles across 5 states · Bands 2, 3, 4, 8 (RGB + NIR) · Atmospheric correction via Sen2Cor</div>
+        </div>
+      </li>
+      <li>
+        <div class="mb">
+          <div class="mn">Labelling and Ground-truth Preparation</div>
+          <div class="md">Used the Microsoft AI4Earth Solar Farm India dataset (1,363 labelled farms) as primary training labels. Manually verified and corrected ~140 labels in QGIS against higher-resolution Google Earth imagery where Sentinel-2 boundaries were ambiguous.</div>
+          <div class="mdt">Train / Val / Test split: 80 / 10 / 10 by geographic region — not random, to avoid spatial data leakage</div>
+        </div>
+      </li>
+      <li>
+        <div class="mb">
+          <div class="mn">Model Training</div>
+          <div class="md">Fine-tuned SegFormer-B5 (pretrained on ADE20K) for binary segmentation: solar farm vs. background. Trained for 50 epochs on Google Colab (A100 GPU). Used hard negative mining — reflective water bodies and greenhouses were explicitly included as negatives — adapting the approach from Ortiz et al. (2022).</div>
+          <div class="mdt">Batch: 8 · LR: 6×10⁻⁵ · Optimizer: AdamW · Loss: Focal + Dice · ~18 hrs total training</div>
+        </div>
+      </li>
+      <li>
+        <div class="mb">
+          <div class="mn">Post-processing and Vectorisation</div>
+          <div class="md">Applied morphological closing to fill small internal gaps, then converted raster masks to GeoJSON using rasterio + shapely. Filtered out detections smaller than 0.5 ha. Simplified polygon boundaries with a 5 m tolerance to reduce file size.</div>
+          <div class="mdt">Min detection area: 0.5 ha · Simplification tolerance: 5 m</div>
+        </div>
+      </li>
+      <li>
+        <div class="mb">
+          <div class="mn">Validation and Results</div>
+          <div class="md">Evaluated on the held-out geographic test set using intersection-over-union (IoU) and F1. Also ran a qualitative review with my guide, cross-checking suspicious detections against Cartosat-3 imagery in QGIS. Adjusted confidence threshold based on this review.</div>
+        </div>
+      </li>
+    </ol>
+  </section>
 
-  <!-- RIGHT SIDEBAR — Analytics -->
-  <aside id="sidebar-right"></aside>
+  <!-- Results -->
+  <section id="results">
+    <h2 class="sh"><span>Results</span></h2>
+    <p class="results-intro">The model performed well on Rajasthan and Gujarat, which had the most training coverage. Performance dropped in states like Karnataka and Tamil Nadu where smaller farms and more mixed land use made segmentation harder.</p>
+    <div class="comp-grid">
+      <div>
+        <div class="comp-label">Original Sentinel-2 Image</div>
+        <img src="satellite.png" class="comp-img" alt="Original Sentinel-2 satellite image, Rajasthan">
+        <p class="img-caption">Jaisalmer, Rajasthan · Band 4-3-2 · June 2024</p>
+      </div>
+      <div>
+        <div class="comp-label">Model Segmentation Output</div>
+        <div class="comp-rel">
+          <img src="model_output.png" class="comp-img" alt="SegFormer model output with green detection polygons">
+          <svg style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;" viewBox="0 0 400 400">
+            <rect x="6" y="6" width="138" height="20" rx="2" fill="rgba(0,0,0,0.6)"/>
+            <text x="12" y="20" font-family="Courier New,monospace" font-size="10.5" fill="#4ade80">■ Detected  IoU 0.87</text>
+          </svg>
+        </div>
+        <p class="img-caption">SegFormer-B5 prediction overlay · Green = detected solar farm · June 2024</p>
+      </div>
+    </div>
 
-</div>
+    <table class="acc-table">
+      <thead>
+        <tr>
+          <th>Region / Test Set</th><th>IoU</th><th>F1 Score</th><th>Precision</th><th>Recall</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>Rajasthan (primary)</td><td><span class="av">0.87</span></td><td><span class="av">0.92</span></td><td>0.94</td><td>0.90</td></tr>
+        <tr><td>Gujarat</td><td><span class="av">0.83</span></td><td><span class="av">0.88</span></td><td>0.91</td><td>0.85</td></tr>
+        <tr><td>Tamil Nadu</td><td><span class="av">0.79</span></td><td><span class="av">0.85</span></td><td>0.88</td><td>0.82</td></tr>
+        <tr><td>Karnataka</td><td><span class="av">0.76</span></td><td><span class="av">0.82</span></td><td>0.86</td><td>0.78</td></tr>
+        <tr><td><strong>Overall (all states)</strong></td><td><span class="av">0.81</span></td><td><span class="av">0.87</span></td><td>0.90</td><td>0.84</td></tr>
+      </tbody>
+    </table>
+    <p class="acc-note">Evaluated on geographic test split (not random). Pixel-level metrics over full raster extent. All results on Sentinel-2 June 2024 acquisitions.</p>
+  </section>
 
-<!-- ═══════════════════════════════════════════════════════════════
-     TAB CONTENT OVERLAYS (rendered but hidden until tab switch)
-     ═══════════════════════════════════════════════════════════════ -->
+  <!-- Observations -->
+  <section id="observations">
+    <h2 class="sh"><span>Key Observations</span></h2>
+    <p class="obs"><strong>False positives from water bodies:</strong> The model initially confused large reservoirs and irrigation canals in Gujarat with solar panels due to similar Band-8 reflectance. Hard negative mining in the second training run largely resolved this.</p>
+    <p class="obs"><strong>Boundary precision degrades at 10 m:</strong> For installations under 2 ha, the 10 m Sentinel-2 resolution limits boundary accuracy. Cross-checking against Cartosat-3 (0.25 m) showed model boundaries are typically off by 1–2 pixels.</p>
+    <p class="obs"><strong>Seasonal variation matters:</strong> Scenes acquired during the Kharif season (June–September) showed higher false positive rates in agricultural areas where harvested fields can appear spectrally similar to solar panels. Dry-season imagery performed significantly better.</p>
+    <p class="obs"><strong>~1,290 farms detected nationally:</strong> Running inference over all downloaded tiles yielded roughly 1,290 unique solar farm polygons, covering an estimated 91 GW of installed capacity — broadly consistent with MNRE's reported figures.</p>
+  </section>
 
-<!-- Suitability Tab -->
-<div id="tab-suitability" class="tab-content" style="top:58px;"></div>
+  <!-- Tech Stack -->
+  <section id="tech">
+    <h2 class="sh"><span>Tools and Technologies</span></h2>
+    <p class="tech-intro">I kept the stack entirely open-source so the pipeline can be reproduced without any paid tools:</p>
+    <div class="badges">
+      <span class="badge hi">Python 3.11</span>
+      <span class="badge hi">PyTorch 2.1</span>
+      <span class="badge hi">HuggingFace Transformers</span>
+      <span class="badge">Sentinel-2 L2A (ESA Copernicus)</span>
+      <span class="badge">rasterio · shapely · geopandas</span>
+      <span class="badge">QGIS 3.36</span>
+      <span class="badge">Google Colab (A100 GPU)</span>
+      <span class="badge">Leaflet.js (web map)</span>
+      <span class="badge">Microsoft AI4Earth dataset</span>
+    </div>
+    <div class="ds-note">
+      <strong>Primary dataset:</strong> Microsoft AI4Earth Solar Farm India — Ortiz et al. (2022), <em>"Mapping Solar Farms in India Using Satellite Imagery"</em>, arXiv:2202.01340. 1,363 labelled farms across 10 states. Licensed under CDLA-Permissive-2.0. The hard negative mining approach from that paper was the single most impactful change I made to reduce false positives.
+    </div>
+  </section>
 
-<!-- Change Detection Tab -->
-<div id="tab-change" class="tab-content" style="top:58px;"></div>
+  <!-- Limitations -->
+  <section id="limitations">
+    <h2 class="sh"><span>Limitations and Future Work</span></h2>
+    <ul>
+      <li><strong>No temporal tracking yet:</strong> The current pipeline only processes single-date acquisitions. A change-detection layer comparing 2020 vs. 2024 imagery is partially implemented but not fully validated.</li>
+      <li><strong>Rooftop solar is not detected:</strong> Trained only on utility-scale installations (&gt;0.5 ha). Rooftop panels in urban areas are too small and spectrally mixed at 10 m resolution.</li>
+      <li><strong>Northern states under-represented:</strong> Himachal Pradesh, J&amp;K, and Uttarakhand had very few training examples. Performance in these states is unreliable.</li>
+      <li><strong>Label quality issues:</strong> About 8% of AI4Earth labels appeared misaligned when cross-checked against higher-resolution imagery. Cleaner labels would likely improve IoU by 2–3 points.</li>
+    </ul>
+  </section>
 
-<!-- Reports Tab -->
-<div id="tab-reports" class="tab-content" style="top:58px;"></div>
+</div><!-- /.page-wrap -->
 
-<!-- ═══════════════════════════════════════════════════════════════
-     SCRIPTS (CDN Libraries)
-     ═══════════════════════════════════════════════════════════════ -->
-
-<!-- Leaflet JS -->
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-
-<!-- Chart.js -->
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
-
-<!-- Turf.js (GeoJSON area/centroid calculations) -->
-<script src="https://cdn.jsdelivr.net/npm/@turf/turf@6.5.0/turf.min.js"></script>
-
-<!-- App Modules -->
-<script src="data.js"></script>
-<script src="charts.js"></script>
-<script src="map.js"></script>
-<script src="app.js"></script>
-
-
-
-
-<!-- Pulse ring keyframe (injected for marker icons) -->
-<style>
-@keyframes pulse-ring {
-  0%  { width:8px;height:8px;opacity:0.7;margin:-4px 0 0 -4px; }
-  100%{ width:40px;height:40px;opacity:0;margin:-20px 0 0 -20px; }
-}
-</style>
+<!-- Footer -->
+<footer>
+  <div class="footer-inner">
+    <div class="fi">
+      <strong>Anandraj</strong><br>
+      <span class="roll">B.Tech Student &nbsp;·&nbsp; ISRO Summer Internship 2024</span><br>
+      Guide: Scientist/Engineer, Land Use &amp; Land Cover Division<br>
+      <span class="nrsc">National Remote Sensing Centre (NRSC)</span><br>
+      Balanagar, Hyderabad – 500 037, Telangana, India
+    </div>
+    <div class="fr">
+      Department of Space<br>Government of India<br><br>
+      <a href="dashboard.html" style="color:var(--orange);font-size:0.8rem;">→ Interactive Dashboard</a>
+    </div>
+  </div>
+</footer>
 
 </body>
 </html>
