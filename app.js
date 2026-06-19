@@ -1,6 +1,30 @@
 // SolarAI — Core Application Logic
 'use strict';
 
+// ─── ISRO EMBLEM SVG ─────────────────────────────────────────────────────────
+function isroEmblemSVG() {
+  return `<svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="20" cy="20" r="18" stroke="rgba(245,158,11,0.4)" stroke-width="1"/>
+    <ellipse cx="20" cy="20" rx="18" ry="7" stroke="rgba(6,182,212,0.6)" stroke-width="1.2"
+             transform="rotate(-25 20 20)" stroke-dasharray="3,2"/>
+    <circle cx="20" cy="20" r="10" stroke="rgba(29,111,164,0.5)" stroke-width="1"/>
+    <circle cx="20" cy="20" r="5" fill="#f59e0b" opacity="0.9"/>
+    <circle cx="20" cy="20" r="3" fill="#fbbf24"/>
+    <g stroke="#f59e0b" stroke-width="1" opacity="0.7">
+      <line x1="20" y1="13" x2="20" y2="10"/>
+      <line x1="20" y1="27" x2="20" y2="30"/>
+      <line x1="13" y1="20" x2="10" y2="20"/>
+      <line x1="27" y1="20" x2="30" y2="20"/>
+      <line x1="15.4" y1="15.4" x2="13.2" y2="13.2"/>
+      <line x1="24.6" y1="24.6" x2="26.8" y2="26.8"/>
+      <line x1="24.6" y1="15.4" x2="26.8" y2="13.2"/>
+      <line x1="15.4" y1="24.6" x2="13.2" y2="26.8"/>
+    </g>
+    <circle cx="35" cy="12" r="2" fill="#ffffff" opacity="0.8"/>
+  </svg>`;
+}
+window.isroEmblemSVG = isroEmblemSVG;
+
 // ─── STATE ───────────────────────────────────────────────────────────────────
 const AppState = {
   activeTab: 'dashboard',
