@@ -331,15 +331,15 @@ function toggleLayer(layerName, visible) {
 }
 
 function switchBasemap(type) {
+  // Always remove all base layers first to prevent stacking
+  [_layers.baseLight, _layers.baseDark, _layers.baseSatellite].forEach(l => {
+    if (l && _map.hasLayer(l)) _map.removeLayer(l);
+  });
   if (type === 'satellite') {
-    _map.removeLayer(_layers.baseLight);
     _layers.baseSatellite.addTo(_map);
   } else if (type === 'dark') {
-    _map.removeLayer(_layers.baseLight);
     _layers.baseDark.addTo(_map);
   } else {
-    _map.removeLayer(_layers.baseDark);
-    _map.removeLayer(_layers.baseSatellite);
     _layers.baseLight.addTo(_map);
   }
 }

@@ -37,7 +37,7 @@ const AppState = {
   selectedCandidateId: null,
   activeLayers: {
     solarFarms: true, ghiHeatmap: false, stateBounds: true,
-    candidates: false, grid: false, satellite: false
+    candidates: false, grid: false, satellite: false, nightMode: false
   },
   changeYearFrom: 2019,
   changeYearTo: 2024
@@ -276,10 +276,39 @@ function buildSidebarLeft() {
 
     <!-- Layer Controls -->
     <div class="sidebar-section">
-            <span class="layer-name">${l.label}</span>
-            <div class="toggle-switch"></div>
-          </div>
-        `).join('')}
+      <div class="section-header">
+        <div class="section-header-icon">🗂</div>
+        <div class="section-title">Map Layers</div>
+      </div>
+      <div class="section-body">
+        <div class="layer-list">
+          ${[
+            { key:'solarFarms',  color:'#1b7a3e', label:'Solar Farm Polygons' },
+            { key:'ghiHeatmap',  color:'#e8890a', label:'GHI Irradiance Map'  },
+            { key:'stateBounds', color:'#1a4d8f', label:'State Boundaries'    },
+            { key:'candidates',  color:'#7c3aed', label:'Candidate Sites'     },
+            { key:'grid',        color:'#7c3aed', label:'PGCIL Grid Lines'    },
+            { key:'satellite',   color:'#0e7490', label:'Satellite Basemap'   },
+          ].map(l => `
+            <div class="layer-toggle ${AppState.activeLayers[l.key] ? 'active' : ''}"
+                 id="layer-${l.key}" onclick="App.toggleLayer('${l.key}')">
+              <div class="layer-dot" style="background:${l.color};"></div>
+              <span class="layer-name">${l.label}</span>
+              <div class="toggle-switch"></div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    </div>
+
+    <!-- Data Attribution -->
+    <div class="sidebar-section" style="background:var(--isro-xpale);">
+      <div class="section-body" style="padding:8px 12px;">
+        <div style="font-size:0.62rem;color:var(--text-muted);line-height:1.6;">
+          📚 <strong style="color:var(--isro-navy);">Data: Microsoft AI4Earth</strong><br>
+          Ortiz et al. 2022 · arXiv:2202.01340<br>
+          1,363 farms · Sentinel-2 · CDLA-2.0
+        </div>
       </div>
     </div>
   `;
