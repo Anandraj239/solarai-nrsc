@@ -1175,3 +1175,255 @@ window.SolarAIApp = {
 
 // ─── BOOT ────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', init);
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ─── RENDER BACKEND INTEGRATION ─────────────────────────────────────────────
+// Live API: https://solarai-api.onrender.com
+// ═══════════════════════════════════════════════════════════════════════════════
+const RENDER_API = 'https://solarai-api.onrender.com';
+
+// ── Status badge injected into navbar ─────────────────────────────────────────
+function _injectStatusBadge(alive) {
+  const nav = document.querySelector('.nav-right') || document.querySelector('nav') || document.body;
+  const existing = document.getElementById('api-status-badge');
+  if (existing) existing.remove();
+
+  const badge = document.createElement('div');
+  badge.id = 'api-status-badge';
+  badge.style.cssText = [
+    'display:inline-flex', 'align-items:center', 'gap:6px',
+    'padding:4px 10px', 'border-radius:20px', 'font-size:11px',
+    'font-weight:600', 'letter-spacing:0.4px',
+    alive
+      ? 'background:rgba(34,197,94,0.15);color:#16a34a;border:1px solid rgba(34,197,94,0.4)'
+      : 'background:rgba(239,68,68,0.12);color:#dc2626;border:1px solid rgba(239,68,68,0.3)',
+    'position:fixed', 'bottom:16px', 'left:16px', 'z-index:9999',
+    'box-shadow:0 2px 8px rgba(0,0,0,0.15)', 'cursor:pointer',
+  ].join(';');
+
+  const dot = alive ? '🟢' : '🔴';
+  const label = alive ? 'Backend Live' : 'Backend Offline';
+  badge.innerHTML = `${dot} <span>${label}</span>`;
+  badge.title = alive
+    ? `API: ${RENDER_API}/docs`
+    : 'Using static data. Backend may be sleeping (Render free tier).';
+
+  if (alive) badge.onclick = () => window.open(`${RENDER_API}/docs`, '_blank');
+  document.body.appendChild(badge);
+}
+
+// ── Fetch live solar farms from Render API ────────────────────────────────────
+async function _loadBackendFarms(state = null) {
+  let url = `${RENDER_API}/api/solar-farms/?limit=5000`;
+  if (state) url += `&state=${encodeURIComponent(state)}`;
+  const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
+  if (!res.ok) throw new Error('Non-200 from API');
+  return res.json();
+}
+
+// ── Fetch live suitable sites from Render API ─────────────────────────────────
+async function _loadBackendSites(state = null) {
+  let url = `${RENDER_API}/api/suitable-sites/?limit=2000&min_score=0.65`;
+  if (state) url += `&state=${encodeURIComponent(state)}`;
+  const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
+  if (!res.ok) throw new Error('Non-200 from API');
+  return res.json();
+}
+
+// ── Render backend markers on map ─────────────────────────────────────────────
+function _paintBackendFarms(features) {
+  const mapObj = window.SolarAIMap?.getMap?.();
+  if (!mapObj) return;
+
+  // Remove old backend layer if exists
+  if (mapObj.getLayer?.('backend-farms')) {
+    mapObj.removeLayer('backend-farms');
+    mapObj.removeSource('backend-farms');
+  }
+
+  // Use Leaflet if SolarAIMap exposes it
+  const lMap = window._leafletMap;
+  if (!lMap) return;
+
+  if (window._backendFarmLayer) window._backendFarmLayer.clearLayers();
+  else window._backendFarmLayer = L.layerGroup().addTo(lMap);
+
+  features.forEach(f => {
+    const geom = f.geometry;
+    if (!geom) return;
+    let latLng;
+    if (geom.type === 'Point') {
+      latLng = [geom.coordinates[1], geom.coordinates[0]];
+    } else if (geom.type === 'Polygon' || geom.type === 'MultiPolygon') {
+      const ring = geom.type === 'Polygon' ? geom.coordinates[0] : geom.coordinates[0][0];
+      const lats = ring.map(c => c[1]), lons = ring.map(c => c[0]);
+      latLng = [lats.reduce((a,b)=>a+b,0)/lats.length, lons.reduce((a,b)=>a+b,0)/lons.length];
+    } else return;
+
+    const p = f.properties;
+    L.circleMarker(latLng, {
+      radius: 8, color: '#15803d', fillColor: '#22c55e', fillOpacity: 0.85, weight: 2,
+    })
+      .bindPopup(`
+        <div style="font-family:system-ui;font-size:13px;min-width:210px">
+          <b style="color:#15803d">✅ Existing Solar Farm</b>
+          <hr style="margin:5px 0"/>
+          <b>${p.name || 'Solar Farm'}</b><br/>
+          📍 ${p.state || '—'} › ${p.district || '—'}<br/>
+          📐 Area: <b>${p.area_ha || '—'} ha</b><br/>
+          ⚡ Capacity: <b>${p.capacity_mw || '—'} MW</b><br/>
+          🎯 Confidence: <b>${p.confidence ? (p.confidence*100).toFixed(0)+'%' : '—'}</b><br/>
+          🛰️ Source: ${p.satellite_source || 'Sentinel-2'}
+        </div>`)
+      .addTo(window._backendFarmLayer);
+  });
+  showToast(`🛰️ Loaded ${features.length} farms from live API`, 'success');
+}
+
+function _paintBackendSites(features) {
+  const lMap = window._leafletMap;
+  if (!lMap) return;
+
+  if (window._backendSiteLayer) window._backendSiteLayer.clearLayers();
+  else window._backendSiteLayer = L.layerGroup().addTo(lMap);
+
+  features.forEach(f => {
+    const geom = f.geometry;
+    if (!geom || geom.type !== 'Point') return;
+    const latLng = [geom.coordinates[1], geom.coordinates[0]];
+    const p = f.properties;
+    L.circleMarker(latLng, {
+      radius: 7, color: '#c2410c', fillColor: '#f97316', fillOpacity: 0.8, weight: 1.5,
+    })
+      .bindPopup(`
+        <div style="font-family:system-ui;font-size:13px;min-width:210px">
+          <b style="color:#c2410c">🟠 Recommended Site</b>
+          <hr style="margin:5px 0"/>
+          📍 ${p.state || '—'} › ${p.district || '—'}<br/>
+          ⭐ Score: <b>${p.suitability_score ? (p.suitability_score*100).toFixed(0)+'%' : '—'}</b><br/>
+          ☀️ Irradiance: <b>${p.solar_irradiance || '—'} kWh/m²/day</b><br/>
+          🏔️ Slope: <b>${p.slope_deg || '—'}°</b><br/>
+          🌿 Land: ${p.land_use || '—'}<br/>
+          🔌 Grid dist: <b>${p.grid_distance_km || '—'} km</b><br/>
+          ⚡ Est. Capacity: <b>${p.recommended_capacity_mw || '—'} MW</b>
+        </div>`)
+      .addTo(window._backendSiteLayer);
+  });
+}
+
+// ── State filter wired to live API ────────────────────────────────────────────
+async function filterByStateFromAPI(state) {
+  const apiState = (state && state !== 'all' && state !== 'All India') ? state : null;
+
+  showToast('🔄 Fetching from live backend…', 'info');
+
+  // Auto-zoom
+  if (apiState) {
+    try {
+      const bboxRes = await fetch(`${RENDER_API}/api/states/${encodeURIComponent(apiState)}/bbox`,
+        { signal: AbortSignal.timeout(5000) });
+      const bboxData = await bboxRes.json();
+      if (bboxData.bbox) {
+        const [xmin, ymin, xmax, ymax] = bboxData.bbox;
+        window._leafletMap?.fitBounds([[ymin, xmin], [ymax, xmax]], { padding: [40, 40] });
+      }
+    } catch { /* zoom failure is non-fatal */ }
+  } else {
+    window._leafletMap?.setView([20.5937, 78.9629], 5);
+  }
+
+  const [farmsData, sitesData] = await Promise.all([
+    _loadBackendFarms(apiState),
+    _loadBackendSites(apiState),
+  ]);
+
+  _paintBackendFarms(farmsData.features || []);
+  _paintBackendSites(sitesData.features || []);
+
+  addLog(`Backend filter: ${apiState || 'All India'} → ${(farmsData.features||[]).length} farms, ${(sitesData.features||[]).length} sites`, 'success');
+}
+
+// ── Add map legend ─────────────────────────────────────────────────────────────
+function _addMapLegend() {
+  const legend = document.createElement('div');
+  legend.id = 'map-legend-overlay';
+  legend.style.cssText = [
+    'position:fixed', 'bottom:70px', 'left:16px', 'z-index:999',
+    'background:rgba(255,255,255,0.95)', 'padding:10px 14px',
+    'border-radius:10px', 'box-shadow:0 2px 10px rgba(0,0,0,0.15)',
+    'font-size:12px', 'font-family:system-ui', 'line-height:2',
+    'border:1px solid rgba(0,0,0,0.08)',
+  ].join(';');
+  legend.innerHTML = `
+    <b style="display:block;margin-bottom:2px;color:#1e293b">Map Legend</b>
+    <span style="color:#22c55e;font-size:17px">●</span>&nbsp; Existing Solar Farm<br/>
+    <span style="color:#f97316;font-size:17px">●</span>&nbsp; Suitable Site (Recommended)
+  `;
+  document.body.appendChild(legend);
+}
+
+// ── Detect and expose Leaflet map instance ─────────────────────────────────────
+function _detectLeafletMap() {
+  // Try common patterns used in map.js
+  if (window._leafletMap) return window._leafletMap;
+  const containers = document.querySelectorAll('.leaflet-container');
+  if (containers.length > 0) {
+    for (const [key, val] of Object.entries(window)) {
+      if (val && typeof val === 'object' && val._container === containers[0]) {
+        window._leafletMap = val;
+        return val;
+      }
+    }
+  }
+  return null;
+}
+
+// ── Main backend bootstrap ─────────────────────────────────────────────────────
+async function initBackendIntegration() {
+  // Wait for map to be ready
+  await new Promise(r => setTimeout(r, 1500));
+
+  _detectLeafletMap();
+
+  // Expose filterByStateFromAPI globally for AOI dropdown
+  window.App.filterByStateFromAPI = filterByStateFromAPI;
+
+  // Health check
+  let alive = false;
+  try {
+    const r = await fetch(`${RENDER_API}/health`, { signal: AbortSignal.timeout(8000) });
+    alive = r.ok;
+  } catch { alive = false; }
+
+  _injectStatusBadge(alive);
+  _addMapLegend();
+
+  if (alive) {
+    addLog('✅ Render backend connected: ' + RENDER_API, 'success');
+    // Load all-India data from API on start
+    try {
+      const [farmsData, sitesData] = await Promise.all([
+        _loadBackendFarms(null),
+        _loadBackendSites(null),
+      ]);
+      _paintBackendFarms(farmsData.features || []);
+      _paintBackendSites(sitesData.features || []);
+      addLog(`📡 Live data loaded: ${(farmsData.features||[]).length} farms, ${(sitesData.features||[]).length} suitable sites`, 'success');
+    } catch (err) {
+      addLog('⚠️ Data fetch failed: ' + err.message, 'warn');
+    }
+  } else {
+    addLog('⚠️ Backend offline or starting up (Render free tier sleeps). Using static data.', 'warn');
+  }
+}
+
+// Patch updateAOI to also call the backend filter
+const _origUpdateAOI = window.App.updateAOI || updateAOI;
+window.App.updateAOI = async function(val) {
+  _origUpdateAOI(val);
+  try { await filterByStateFromAPI(val); } catch { /* backend offline, ignore */ }
+};
+
+// Boot after DOMContentLoaded
+document.addEventListener('DOMContentLoaded', () => setTimeout(initBackendIntegration, 800));
+

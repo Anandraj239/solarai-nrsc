@@ -15,6 +15,7 @@ function initMap() {
     attributionControl: true,
     preferCanvas: true
   });
+  window._leafletMap = _map; // expose for backend integration layer
 
   // ─── BASE LAYERS ────────────────────────────────────────────────────────────
   // Light professional basemap (similar to Bhuvan/NRSC aesthetic)
