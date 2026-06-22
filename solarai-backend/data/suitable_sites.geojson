@@ -1,0 +1,465 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          70.9,
+          27.1
+        ]
+      },
+      "properties": {
+        "id": 1,
+        "state": "Rajasthan",
+        "district": "Jaisalmer",
+        "suitability_score": 0.95,
+        "solar_irradiance": 6.8,
+        "slope_deg": 0.8,
+        "land_use": "wasteland",
+        "grid_distance_km": 12,
+        "recommended_capacity_mw": 47.5,
+        "type": "suitable",
+        "color": "orange"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          71.39,
+          25.74
+        ]
+      },
+      "properties": {
+        "id": 2,
+        "state": "Rajasthan",
+        "district": "Barmer",
+        "suitability_score": 0.92,
+        "solar_irradiance": 6.7,
+        "slope_deg": 1.2,
+        "land_use": "barren",
+        "grid_distance_km": 18,
+        "recommended_capacity_mw": 46.0,
+        "type": "suitable",
+        "color": "orange"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          72.1,
+          28.22
+        ]
+      },
+      "properties": {
+        "id": 3,
+        "state": "Rajasthan",
+        "district": "Bikaner",
+        "suitability_score": 0.9,
+        "solar_irradiance": 6.5,
+        "slope_deg": 0.5,
+        "land_use": "wasteland",
+        "grid_distance_km": 22,
+        "recommended_capacity_mw": 45.0,
+        "type": "suitable",
+        "color": "orange"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          73.73,
+          27.2
+        ]
+      },
+      "properties": {
+        "id": 4,
+        "state": "Rajasthan",
+        "district": "Nagaur",
+        "suitability_score": 0.88,
+        "solar_irradiance": 6.4,
+        "slope_deg": 1.0,
+        "land_use": "scrubland",
+        "grid_distance_km": 16,
+        "recommended_capacity_mw": 44.0,
+        "type": "suitable",
+        "color": "orange"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          69.8,
+          23.5
+        ]
+      },
+      "properties": {
+        "id": 5,
+        "state": "Gujarat",
+        "district": "Kutch",
+        "suitability_score": 0.9,
+        "solar_irradiance": 6.2,
+        "slope_deg": 0.5,
+        "land_use": "wasteland",
+        "grid_distance_km": 25,
+        "recommended_capacity_mw": 45.0,
+        "type": "suitable",
+        "color": "orange"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          71.81,
+          24.17
+        ]
+      },
+      "properties": {
+        "id": 6,
+        "state": "Gujarat",
+        "district": "Banaskantha",
+        "suitability_score": 0.87,
+        "solar_irradiance": 6.1,
+        "slope_deg": 1.0,
+        "land_use": "scrubland",
+        "grid_distance_km": 20,
+        "recommended_capacity_mw": 43.5,
+        "type": "suitable",
+        "color": "orange"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          71.65,
+          22.73
+        ]
+      },
+      "properties": {
+        "id": 7,
+        "state": "Gujarat",
+        "district": "Surendranagar",
+        "suitability_score": 0.85,
+        "solar_irradiance": 5.9,
+        "slope_deg": 1.5,
+        "land_use": "barren",
+        "grid_distance_km": 14,
+        "recommended_capacity_mw": 42.5,
+        "type": "suitable",
+        "color": "orange"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          77.5,
+          14.4
+        ]
+      },
+      "properties": {
+        "id": 8,
+        "state": "Andhra Pradesh",
+        "district": "Anantapur",
+        "suitability_score": 0.85,
+        "solar_irradiance": 5.9,
+        "slope_deg": 1.5,
+        "land_use": "barren",
+        "grid_distance_km": 15,
+        "recommended_capacity_mw": 42.5,
+        "type": "suitable",
+        "color": "orange"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          78.1,
+          15.5
+        ]
+      },
+      "properties": {
+        "id": 9,
+        "state": "Andhra Pradesh",
+        "district": "Kurnool",
+        "suitability_score": 0.83,
+        "solar_irradiance": 5.8,
+        "slope_deg": 1.8,
+        "land_use": "wasteland",
+        "grid_distance_km": 12,
+        "recommended_capacity_mw": 41.5,
+        "type": "suitable",
+        "color": "orange"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          77.72,
+          9.05
+        ]
+      },
+      "properties": {
+        "id": 10,
+        "state": "Tamil Nadu",
+        "district": "Tirunelveli",
+        "suitability_score": 0.83,
+        "solar_irradiance": 5.8,
+        "slope_deg": 2.0,
+        "land_use": "wasteland",
+        "grid_distance_km": 10,
+        "recommended_capacity_mw": 41.5,
+        "type": "suitable",
+        "color": "orange"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          77.99,
+          8.81
+        ]
+      },
+      "properties": {
+        "id": 11,
+        "state": "Tamil Nadu",
+        "district": "Thoothukudi",
+        "suitability_score": 0.8,
+        "solar_irradiance": 5.7,
+        "slope_deg": 2.2,
+        "land_use": "barren",
+        "grid_distance_km": 18,
+        "recommended_capacity_mw": 40.0,
+        "type": "suitable",
+        "color": "orange"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          75.02,
+          24.47
+        ]
+      },
+      "properties": {
+        "id": 12,
+        "state": "Madhya Pradesh",
+        "district": "Neemuch",
+        "suitability_score": 0.81,
+        "solar_irradiance": 5.6,
+        "slope_deg": 1.8,
+        "land_use": "scrubland",
+        "grid_distance_km": 22,
+        "recommended_capacity_mw": 40.5,
+        "type": "suitable",
+        "color": "orange"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          75.07,
+          24.07
+        ]
+      },
+      "properties": {
+        "id": 13,
+        "state": "Madhya Pradesh",
+        "district": "Mandsaur",
+        "suitability_score": 0.79,
+        "solar_irradiance": 5.5,
+        "slope_deg": 2.0,
+        "land_use": "wasteland",
+        "grid_distance_km": 28,
+        "recommended_capacity_mw": 39.5,
+        "type": "suitable",
+        "color": "orange"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          76.92,
+          15.14
+        ]
+      },
+      "properties": {
+        "id": 14,
+        "state": "Karnataka",
+        "district": "Bellary",
+        "suitability_score": 0.8,
+        "solar_irradiance": 5.7,
+        "slope_deg": 1.2,
+        "land_use": "barren",
+        "grid_distance_km": 30,
+        "recommended_capacity_mw": 40.0,
+        "type": "suitable",
+        "color": "orange"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          77.36,
+          16.2
+        ]
+      },
+      "properties": {
+        "id": 15,
+        "state": "Karnataka",
+        "district": "Raichur",
+        "suitability_score": 0.78,
+        "solar_irradiance": 5.6,
+        "slope_deg": 1.5,
+        "land_use": "scrubland",
+        "grid_distance_km": 25,
+        "recommended_capacity_mw": 39.0,
+        "type": "suitable",
+        "color": "orange"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          79.27,
+          16.97
+        ]
+      },
+      "properties": {
+        "id": 16,
+        "state": "Telangana",
+        "district": "Nalgonda",
+        "suitability_score": 0.78,
+        "solar_irradiance": 5.5,
+        "slope_deg": 2.5,
+        "land_use": "scrubland",
+        "grid_distance_km": 18,
+        "recommended_capacity_mw": 39.0,
+        "type": "suitable",
+        "color": "orange"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          76.04,
+          18.18
+        ]
+      },
+      "properties": {
+        "id": 17,
+        "state": "Maharashtra",
+        "district": "Osmanabad",
+        "suitability_score": 0.76,
+        "solar_irradiance": 5.4,
+        "slope_deg": 2.2,
+        "land_use": "wasteland",
+        "grid_distance_km": 35,
+        "recommended_capacity_mw": 38.0,
+        "type": "suitable",
+        "color": "orange"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          75.9,
+          17.68
+        ]
+      },
+      "properties": {
+        "id": 18,
+        "state": "Maharashtra",
+        "district": "Solapur",
+        "suitability_score": 0.75,
+        "solar_irradiance": 5.4,
+        "slope_deg": 2.0,
+        "land_use": "barren",
+        "grid_distance_km": 28,
+        "recommended_capacity_mw": 37.5,
+        "type": "suitable",
+        "color": "orange"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          72.5,
+          26.5
+        ]
+      },
+      "properties": {
+        "id": 19,
+        "state": "Rajasthan",
+        "district": "Jodhpur",
+        "suitability_score": 0.88,
+        "solar_irradiance": 6.3,
+        "slope_deg": 0.9,
+        "land_use": "wasteland",
+        "grid_distance_km": 20,
+        "recommended_capacity_mw": 44.0,
+        "type": "suitable",
+        "color": "orange"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          72.12,
+          23.85
+        ]
+      },
+      "properties": {
+        "id": 20,
+        "state": "Gujarat",
+        "district": "Patan",
+        "suitability_score": 0.84,
+        "solar_irradiance": 6.0,
+        "slope_deg": 1.1,
+        "land_use": "barren",
+        "grid_distance_km": 17,
+        "recommended_capacity_mw": 42.0,
+        "type": "suitable",
+        "color": "orange"
+      }
+    }
+  ]
+}
