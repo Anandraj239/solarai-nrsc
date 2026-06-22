@@ -1,0 +1,80 @@
+version: "3.8"
+
+services:
+
+  postgis:
+    image: postgis/postgis:15-3.4
+    container_name: solarai_postgis
+    environment:
+      POSTGRES_DB: solardb
+      POSTGRES_USER: solarai
+      POSTGRES_PASSWORD: solarai_secret_2024
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgis_data:/var/lib/postgresql/data
+      - ./backend/sql/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U solarai -d solardb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  geoserver:
+    image: kartoza/geoserver:2.24.0
+    container_name: solarai_geoserver
+    environment:
+      GEOSERVER_ADMIN_USER: admin
+      GEOSERVER_ADMIN_PASSWORD: geoserver_admin_2024
+      INITIAL_MEMORY: 512M
+      MAXIMUM_MEMORY: 2G
+    ports:
+      - "8080:8080"
+    volumes:
+      - geoserver_data:/opt/geoserver/data_dir
+    depends_on:
+      postgis:
+        condition: service_healthy
+
+  fastapi:
+    build: ./backend
+    container_name: solarai_fastapi
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://solarai:solarai_secret_2024@postgis:5432/solardb
+      GEOSERVER_URL: http://geoserver:8080/geoserver
+      GEOSERVER_USER: admin
+      GEOSERVER_PASS: geoserver_admin_2024
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      postgis:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+      - satellite_data:/data/satellite
+
+  redis:
+    image: redis:7-alpine
+    container_name: solarai_redis
+    ports:
+      - "6379:6379"
+
+  celery_worker:
+    build: ./backend
+    container_name: solarai_celery
+    command: celery -A pipeline.scheduler worker --loglevel=info --beat
+    environment:
+      DATABASE_URL: postgresql+asyncpg://solarai:solarai_secret_2024@postgis:5432/solardb
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      - redis
+      - postgis
+    volumes:
+      - ./backend:/app
+      - satellite_data:/data/satellite
+
+volumes:
+  postgis_data:
+  geoserver_data:
+  satellite_data:
