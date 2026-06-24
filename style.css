@@ -98,7 +98,15 @@
   --sidebar-w:  270px;
   --right-w:    288px;
   --bottom-h:   270px;
+
+  /* ── Problem 4 aliases — required by app.js template ── */
+  --bg:        #f0f3f7;   /* alias for --bg-app */
+  --surface:   #ffffff;   /* alias for --bg-panel */
+  --surface-2: #f7f9fc;   /* alias for --bg-sidebar */
+  --solar:     #f59e0b;   /* override to brighter solar amber */
+  --accent-cyan: #06b6d4;
 }
+
 
 /* ─── RESET ─────────────────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -992,3 +1000,121 @@ body {
   font-weight: 600; cursor: pointer; transition: all 0.15s;
 }
 .rc-generate:hover { background: var(--isro-blue); color: #fff; border-color: var(--isro-navy); }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   PROBLEM 3 — App.js Template Classes (exact names from original spec)
+   These coexist with the existing Bhuvan-style classes as aliases.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Sidebar sections (spec names) */
+.sidebar-title {
+  font-size: 0.72rem; font-weight: 700; color: var(--text-muted);
+  letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 8px;
+}
+.ctrl-select { width: 100%; margin-bottom: 6px; }
+.ctrl-label  { font-size: 0.72rem; color: var(--text-muted); display: block; margin-bottom: 3px; }
+.ctrl-val-row {
+  display: flex; justify-content: space-between;
+  font-size: 0.68rem; color: var(--text-muted); margin-bottom: 4px;
+}
+.toggle-row {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 0.75rem; color: var(--text-secondary); cursor: pointer; padding: 4px 0;
+}
+
+/* Farm list (spec alias for .farm-item already present above, add .farm-conf) */
+.farm-conf { margin-left: auto; font-family: 'Roboto Mono', monospace; font-size: 0.68rem; }
+
+/* KPI aliases (.kpi-val & .kpi-card already present; add .kpi-lbl alias) */
+.kpi-lbl { font-size: 0.62rem; color: var(--text-muted); margin-top: 2px; }
+
+/* Map legend item */
+.legend-item { display: flex; align-items: center; gap: 8px; padding: 2px 0; font-size: 0.7rem; }
+.legend-item span { width: 12px; height: 12px; border-radius: 3px; display: inline-block; flex-shrink: 0; }
+
+/* Scan overlay class (mirrors existing #scan-overlay.active) */
+.scan-overlay { position: absolute; inset: 0; pointer-events: none; z-index: 500; background: transparent; }
+.scan-overlay.active { animation: scan-sweep 4.5s linear forwards; }
+@keyframes scan-sweep {
+  0%   { background: rgba(245,158,11,0.0); }
+  50%  { background: rgba(245,158,11,0.08); }
+  100% { background: rgba(245,158,11,0.0); }
+}
+
+/* Tab overlay inner wrappers */
+.tab-inner { max-width: 1100px; margin: 0 auto; padding: 32px 24px; }
+.tab-heading {
+  font-size: 1.2rem; font-weight: 700; color: var(--text-primary); margin-bottom: 24px;
+}
+
+/* Candidate grid (suitability tab) */
+.candidate-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(240px,1fr)); gap: 16px;
+}
+.candidate-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; padding: 16px; cursor: pointer; transition: box-shadow 0.2s;
+}
+.candidate-card:hover { box-shadow: 0 4px 20px rgba(245,158,11,0.2); }
+.cand-name  { font-weight: 700; font-size: 0.88rem; color: var(--text-primary); }
+.cand-state { font-size: 0.72rem; color: var(--text-muted); margin-bottom: 6px; }
+.cand-score {
+  font-family: 'Roboto Mono', monospace; font-size: 0.82rem;
+  font-weight: 700; margin-bottom: 10px;
+}
+
+/* Grade colour variants (lowercase, matching app.js template) */
+.grade-high   { color: #10b981; }
+.grade-medium { color: #f59e0b; }
+.grade-low    { color: #f97316; }
+
+/* Change detection controls */
+.change-controls {
+  display: flex; gap: 16px; align-items: center; margin-bottom: 20px; flex-wrap: wrap;
+}
+
+/* Report blocks */
+.report-block {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 10px; padding: 20px; margin-bottom: 16px;
+}
+.report-block h3 {
+  font-size: 0.95rem; font-weight: 700; color: var(--text-primary); margin-bottom: 10px;
+}
+.report-block p, .report-block li { font-size: 0.82rem; color: var(--text-secondary); line-height: 1.6; }
+
+/* Navbar aliases (spec names) */
+.brand-solar { color: var(--solar); }
+.brand-ai    { color: var(--text-primary); }
+.nav-badge {
+  font-size: 0.58rem; font-weight: 600; color: var(--text-muted);
+  background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: 4px; padding: 2px 6px; margin-left: 8px;
+}
+.nav-actions { display: flex; align-items: center; gap: 10px; }
+.btn-scan {
+  background: var(--solar); color: #000; border: none; border-radius: 7px;
+  padding: 7px 16px; font-size: 0.78rem; font-weight: 700; cursor: pointer;
+  transition: opacity 0.15s;
+}
+.btn-scan:hover { opacity: 0.85; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   PROBLEM 5 — App-shell layout (body + grid)
+   ═══════════════════════════════════════════════════════════════════════════ */
+/* body already defined above; these supplement */
+#app-shell {
+  flex: 1;
+  grid-template-columns: 260px 1fr 280px;
+  grid-template-rows: 1fr;
+  min-height: 0;
+}
+#sidebar-left  { overflow-y: auto; }
+#sidebar-right { overflow-y: auto; }
+#center-panel  { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+#map-container { flex: 1; position: relative; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   PROBLEM 6 — Loading screen keyframes / classes
+   ═══════════════════════════════════════════════════════════════════════════ */
+@keyframes pulse-dot { 0%,100%{ opacity:1; } 50%{ opacity:0.3; } }
