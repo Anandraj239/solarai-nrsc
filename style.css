@@ -127,7 +127,8 @@ body {
   height: var(--nav-h);
   background: var(--bg-header);
   border-bottom: 3px solid var(--solar);
-  display: flex; align-items: center; padding: 0 16px;
+  display: none; /* shown by JS after boot */
+  align-items: center; padding: 0 16px;
   gap: 14px;
   box-shadow: var(--shadow-nav);
 }
@@ -225,7 +226,7 @@ body {
    MAIN LAYOUT
    ═══════════════════════════════════════════════════════════════════════════ */
 #app-shell {
-  display: grid;
+  display: none; /* shown by JS after boot */
   grid-template-columns: var(--sidebar-w) 1fr var(--right-w);
   height: calc(100vh - var(--nav-h));
   margin-top: var(--nav-h);
@@ -892,9 +893,9 @@ body {
 .load-bar-fill {
   height: 100%; border-radius: 99px;
   background: linear-gradient(90deg, var(--solar), #fff8e0, var(--solar));
-  animation: loadFill 0.6s ease forwards;
+  width: 0%; /* controlled by JS setLoadStatus() */
+  transition: width 0.4s ease;
 }
-@keyframes loadFill { from{width:0%} to{width:100%} }
 .load-status { font-family: 'Roboto Mono', monospace; font-size: 0.68rem; color: var(--isro-pale); }
 
 /* ─── MISC / UTILITIES ────────────────────────────────────────────────────── */
@@ -948,3 +949,46 @@ body {
   #navbar, #sidebar-left, #sidebar-right { display: none; }
   #center-panel { grid-column: 1/-1; }
 }
+
+/* ─── UTILITY CLASSES USED BY APP.JS ────────────────────────────────────── */
+
+/* Range input */
+.ctrl-range {
+  -webkit-appearance: none; appearance: none;
+  width: 100%; height: 4px; border-radius: 99px;
+  background: var(--border-dark); outline: none; cursor: pointer; margin: 6px 0;
+}
+.ctrl-range::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 14px; height: 14px;
+  border-radius: 50%; background: var(--isro-blue);
+  border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,0.2); cursor: pointer;
+}
+
+/* Farm list items */
+.farm-item {
+  display: flex; align-items: center; gap: 7px;
+  padding: 5px 4px; border-radius: var(--r-sm);
+  cursor: pointer; font-size: 0.72rem; color: var(--text-secondary);
+  transition: background 0.13s;
+}
+.farm-item:hover { background: var(--bg-row-hover); }
+
+/* Tab content override to flex-column */
+.tab-content.active { display: flex; flex-direction: column; }
+
+/* Report cards in reports tab */
+.report-card {
+  background: var(--bg-panel); border: 1px solid var(--border);
+  border-radius: var(--r-lg); padding: 18px;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.rc-icon { font-size: 1.8rem; }
+.rc-title { font-size: 0.88rem; font-weight: 700; color: var(--isro-navy); }
+.rc-desc  { font-size: 0.75rem; color: var(--text-muted); line-height: 1.5; flex: 1; }
+.rc-generate {
+  align-self: flex-start; margin-top: 7px; padding: 5px 14px;
+  background: var(--isro-xpale); border: 1px solid var(--border-blue);
+  border-radius: var(--r-full); font-size: 0.7rem; color: var(--isro-blue);
+  font-weight: 600; cursor: pointer; transition: all 0.15s;
+}
+.rc-generate:hover { background: var(--isro-blue); color: #fff; border-color: var(--isro-navy); }

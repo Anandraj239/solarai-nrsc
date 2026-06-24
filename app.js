@@ -1,333 +1,285 @@
-// SolarAI — Core Application Logic
+// SolarAI — NRSC/ISRO Application Shell
+// Bootstraps the full dashboard: navbar, sidebars, map, charts, tabs.
 'use strict';
 
-// ─── ISRO EMBLEM SVG ─────────────────────────────────────────────────────────
-function isroEmblemSVG() {
-  return `<svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <circle cx="20" cy="20" r="18" stroke="rgba(245,158,11,0.4)" stroke-width="1"/>
-    <ellipse cx="20" cy="20" rx="18" ry="7" stroke="rgba(6,182,212,0.6)" stroke-width="1.2"
-             transform="rotate(-25 20 20)" stroke-dasharray="3,2"/>
-    <circle cx="20" cy="20" r="10" stroke="rgba(29,111,164,0.5)" stroke-width="1"/>
-    <circle cx="20" cy="20" r="5" fill="#f59e0b" opacity="0.9"/>
-    <circle cx="20" cy="20" r="3" fill="#fbbf24"/>
-    <g stroke="#f59e0b" stroke-width="1" opacity="0.7">
-      <line x1="20" y1="13" x2="20" y2="10"/>
-      <line x1="20" y1="27" x2="20" y2="30"/>
-      <line x1="13" y1="20" x2="10" y2="20"/>
-      <line x1="27" y1="20" x2="30" y2="20"/>
-      <line x1="15.4" y1="15.4" x2="13.2" y2="13.2"/>
-      <line x1="24.6" y1="24.6" x2="26.8" y2="26.8"/>
-      <line x1="24.6" y1="15.4" x2="26.8" y2="13.2"/>
-      <line x1="15.4" y1="24.6" x2="13.2" y2="26.8"/>
-    </g>
-    <circle cx="35" cy="12" r="2" fill="#ffffff" opacity="0.8"/>
-  </svg>`;
-}
-window.isroEmblemSVG = isroEmblemSVG;
+window.SolarAIApp = (function () {
 
-// ─── STATE ───────────────────────────────────────────────────────────────────
-const AppState = {
-  activeTab: 'dashboard',
-  selectedModel: 'SegFormer-B5',
-  selectedSource: 'Sentinel-2',
-  resolution: '10m',
-  detecting: false,
-  detectionComplete: false,
-  selectedFarmId: null,
-  selectedCandidateId: null,
-  activeLayers: {
-    solarFarms: true, ghiHeatmap: false, stateBounds: true,
-    candidates: false, grid: false, satellite: false, nightMode: false
-  },
-  changeYearFrom: 2019,
-  changeYearTo: 2024
-};
+  // ── Shared state ──────────────────────────────────────────────────────────
+  let _activeTab = 'detection';
 
-// ─── AI DETECTION LOG STEPS ──────────────────────────────────────────────────
-const DETECTION_STEPS = [
-  { msg: 'Initializing SolarAI pipeline v3.2...', type: 'active', delay: 0 },
-  { msg: 'Loading Sentinel-2 L2A tiles (10m MSI)...', type: 'active', delay: 500 },
-  { msg: 'Applying cloud mask (Fmask v4.2) — Coverage: 3.1%', type: 'success', delay: 900 },
-  { msg: 'Computing NDVI, NDWI, BI spectral indices...', type: 'active', delay: 1300 },
-  { msg: 'NDVI threshold: -0.15 | Suppressing vegetation...', type: 'active', delay: 1700 },
-  { msg: 'Suppressing water bodies (NDWI < -0.30)...', type: 'active', delay: 2000 },
-  { msg: 'Running SegFormer-B5 inference (84.7M params)...', type: 'active', delay: 2400 },
-  { msg: 'Semantic segmentation complete — IoU: 0.891', type: 'success', delay: 3200 },
-  { msg: 'Post-processing: Vectorizing binary mask...', type: 'active', delay: 3600 },
-  { msg: 'Applying minimum area filter (1 ha)...', type: 'active', delay: 4000 },
-  { msg: 'Merging proximate polygons (50m threshold)...', type: 'active', delay: 4300 },
-  { msg: 'Running Hard Negative Mining (HNM) filter...', type: 'active', delay: 4700 },
-  { msg: 'Suppressed 23 false positives (rooftops, dry riverbeds)...', type: 'warn', delay: 5100 },
-  { msg: 'Computing confidence scores per polygon...', type: 'active', delay: 5400 },
-  { msg: `✓ Detected ${window.SolarAIData?.SOLAR_FARMS_GEOJSON?.features?.length || 18} solar farms — Mean confidence: 91.4%`, type: 'success', delay: 5800 },
-  { msg: 'Generating GeoJSON polygons...', type: 'active', delay: 6100 },
-  { msg: 'Computing environmental impact metrics...', type: 'active', delay: 6500 },
-  { msg: '✓ Analysis complete. Ready for export.', type: 'success', delay: 6900 },
-];
-
-// ─── INIT ────────────────────────────────────────────────────────────────────
-function init() {
-  showLoadingScreen(() => {
-    buildNavbar();
-    buildSidebarLeft();
-    buildSidebarRight();
-    buildCenterPanel();
-    buildTabContents();
-
-    // Initialize map
-    window.SolarAIMap.initMap();
-
-    // Initialize charts
-    setTimeout(() => {
-      window.SolarAICharts.renderStateDonut('chart-state-donut');
-      window.SolarAICharts.renderTemporalLine('chart-temporal');
-      window.SolarAICharts.renderGHIBar('chart-ghi');
-      window.SolarAICharts.animateAllCounters();
-      startDateTimeTicker();
-    }, 300);
-  });
-}
-
-// ─── LOADING SCREEN ──────────────────────────────────────────────────────────
-function showLoadingScreen(onComplete) {
-  const screen = document.getElementById('loading-screen');
-  const status = document.getElementById('load-status');
-  const msgs = [
-    'Initializing NRSC geospatial engine...',
-    'Loading solar farm dataset...',
-    'Calibrating AI model pipeline...',
-    'SolarAI ready — Jai Hind 🇮🇳'
-  ];
-  let i = 0;
-  const interval = setInterval(() => {
-    if (status) status.textContent = msgs[i] || msgs[msgs.length - 1];
-    i++;
-    if (i >= msgs.length) {
-      clearInterval(interval);
-      setTimeout(() => {
-        screen.style.transition = 'opacity 0.3s';
-        screen.style.opacity = '0';
-        setTimeout(() => {
-          screen.style.display = 'none';
-          onComplete();
-        }, 300);
-      }, 100);
-    }
-  }, 80);
-}
-
-// ─── NAVBAR ──────────────────────────────────────────────────────────────────
-function buildNavbar() {
-  const navbar = document.getElementById('navbar');
-  const tabs = [
-    { id:'dashboard',   icon:'🗺️', label:'Dashboard' },
-    { id:'detection',   icon:'🔍', label:'Detection' },
-    { id:'suitability', icon:'📊', label:'Suitability' },
-    { id:'change',      icon:'📅', label:'Change Detection' },
-    { id:'reports',     icon:'📄', label:'Reports' },
-  ];
-  const tabsHtml = tabs.map(t => `
-    <button class="nav-tab ${t.id === AppState.activeTab ? 'active' : ''}"
-            id="tab-btn-${t.id}" onclick="App.switchTab('${t.id}')">
-      <span class="tab-icon">${t.icon}</span>${t.label}
-    </button>
-  `).join('');
-
-  navbar.innerHTML = `
-    <div class="nav-brand">
-      <div class="nav-emblem">
-        ${isroEmblemSVG()}
-      </div>
-      <div class="nav-wordmark">
-        <span class="brand-name">SolarAI</span>
-        <span class="brand-sub">NRSC · ISRO · Dept. of Space · GoI</span>
-      </div>
-    </div>
-    <div class="nav-status">
-      <div class="status-chip"><div class="status-dot"></div>SENTINEL-2 LIVE</div>
-      <div class="status-chip" style="color:var(--accent-cyan);border-color:rgba(6,182,212,0.3);background:rgba(6,182,212,0.1);">
-        <div class="status-dot" style="background:var(--accent-cyan);"></div>MODEL ONLINE
-      </div>
-    </div>
-    <nav class="nav-tabs">${tabsHtml}</nav>
-    <div class="nav-datetime" id="nav-datetime">
-      <span id="nav-time" style="color:var(--solar);"></span>
-      <span id="nav-date" style="font-size:0.6rem;"></span>
-    </div>
-    <div class="nav-controls">
-      <button class="nav-btn" title="ISRO Bhuvan Portal" onclick="window.open('https://bhuvan.nrsc.gov.in','_blank')">🌐</button>
-      <button class="nav-btn" title="Toggle fullscreen" onclick="App.toggleFullscreen()">⛶</button>
-      <button class="nav-btn" title="Settings">⚙️</button>
-    </div>
-  `;
-}
-
-function startDateTimeTicker() {
-  function tick() {
-    const now = new Date();
-    const timeEl = document.getElementById('nav-time');
-    const dateEl = document.getElementById('nav-date');
-    if (timeEl) timeEl.textContent = now.toLocaleTimeString('en-IN', { hour12: false });
-    if (dateEl) dateEl.textContent = now.toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' });
+  // ── Loading helpers ───────────────────────────────────────────────────────
+  function setLoadStatus(msg, pct) {
+    const el  = document.getElementById('load-status');
+    const bar = document.querySelector('.load-bar-fill');
+    if (el)  el.textContent = msg;
+    if (bar) bar.style.width = pct + '%';
   }
-  tick();
-  setInterval(tick, 1000);
-}
 
-// ─── LEFT SIDEBAR ──────────────────────────────────────────────────────────────────
-function buildSidebarLeft() {
-  const { MODEL_BENCHMARKS } = window.SolarAIData;
-  const sidebar = document.getElementById('sidebar-left');
+  function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
-  sidebar.innerHTML = `
-    <!-- AI Model Selection -->
-    <div class="sidebar-section">
-      <div class="section-header">
-        <div class="section-header-icon">🤖</div>
-        <div class="section-title">AI Model</div>
+  // ── Boot sequence ──────────────────────────────────────────────────────────
+  async function boot() {
+    try {
+      setLoadStatus('Loading geospatial data...', 15);
+      await sleep(300);
+
+      setLoadStatus('Building interface...', 35);
+      buildNavbar();
+      buildLeftSidebar();
+      buildRightSidebar();
+      buildCenterPanel();
+      buildSuitabilityTab();
+      buildChangeTab();
+      buildReportsTab();
+      await sleep(200);
+
+      setLoadStatus('Initialising Leaflet map engine...', 55);
+      window.SolarAIMap.initMap();
+      await sleep(600);
+
+      setLoadStatus('Rendering analytics charts...', 78);
+      setTimeout(() => {
+        window.SolarAICharts.renderStateDonut('chart-state-donut');
+        window.SolarAICharts.renderTemporalLine('chart-temporal');
+        window.SolarAICharts.renderGHIBar('chart-ghi');
+        window.SolarAICharts.renderModelBar('chart-model-perf');
+        window.SolarAICharts.animateAllCounters();
+      }, 400);
+      await sleep(700);
+
+      setLoadStatus('System ready.', 100);
+      await sleep(350);
+
+      // Dismiss loader
+      const ls = document.getElementById('loading-screen');
+      if (ls) {
+        ls.style.transition = 'opacity 0.55s ease';
+        ls.style.opacity = '0';
+        setTimeout(() => { ls.style.display = 'none'; }, 580);
+      }
+
+      // Show shell
+      const shell = document.getElementById('app-shell');
+      const nav   = document.getElementById('navbar');
+      if (shell) shell.style.display = 'grid';
+      if (nav)   nav.style.display   = 'flex';
+
+      // Connect live backend (non-blocking)
+      setTimeout(initBackendIntegration, 1200);
+
+    } catch (err) {
+      console.error('[SolarAI] Boot error:', err);
+      setLoadStatus('Error — see console.', 100);
+    }
+  }
+
+  // ── Navbar ─────────────────────────────────────────────────────────────────
+  function buildNavbar() {
+    const nav = document.getElementById('navbar');
+    if (!nav) return;
+    nav.innerHTML = `
+      <div class="nav-brand">
+        <div class="nav-emblem">${isroEmblemSVG()}</div>
+        <div class="nav-wordmark">
+          <span class="brand-name">SOLAR<span style="color:var(--solar)">AI</span></span>
+          <span class="brand-sub">NRSC · ISRO · Department of Space</span>
+        </div>
       </div>
-      <div class="section-body">
-        <div class="model-grid">
-          ${MODEL_BENCHMARKS.map(m => `
-            <div class="model-card ${m.name === AppState.selectedModel ? 'selected' : ''} ${m.recommended ? 'recommended' : ''}"
-                 onclick="App.selectModel('${m.name}')">
-              <div class="model-name">${m.name}</div>
-              <div class="model-metric">IoU ${(m.iou*100).toFixed(1)}%</div>
+      <div class="nav-divider"></div>
+      <div class="nav-tabs">
+        <button class="nav-tab active" id="ntab-detection"  onclick="SolarAIApp.switchTab('detection')">🛰 Detection</button>
+        <button class="nav-tab"        id="ntab-suitability" onclick="SolarAIApp.switchTab('suitability')">📍 Suitability</button>
+        <button class="nav-tab"        id="ntab-change"     onclick="SolarAIApp.switchTab('change')">📈 Change</button>
+        <button class="nav-tab"        id="ntab-reports"    onclick="SolarAIApp.switchTab('reports')">📋 Reports</button>
+      </div>
+      <div class="nav-controls">
+        <div class="nav-status">
+          <div class="status-chip"><div class="status-dot"></div> OPERATIONAL</div>
+        </div>
+        <select style="background:rgba(255,255,255,0.12);color:#fff;border:1px solid rgba(255,255,255,0.2);border-radius:4px;padding:4px 7px;font-size:0.72rem;cursor:pointer;"
+          onchange="SolarAIMap.switchBasemap(this.value)" title="Basemap">
+          <option value="light">🗺 Light</option>
+          <option value="dark">🌑 Dark</option>
+          <option value="satellite">🛰 Satellite</option>
+        </select>
+      </div>`;
+  }
+
+  function isroEmblemSVG() {
+    return `<svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="20" cy="20" r="18" stroke="rgba(245,158,11,0.4)" stroke-width="1"/>
+      <ellipse cx="20" cy="20" rx="18" ry="7" stroke="rgba(6,182,212,0.6)" stroke-width="1.2"
+               transform="rotate(-25 20 20)" stroke-dasharray="3,2"/>
+      <circle cx="20" cy="20" r="10" stroke="rgba(29,111,164,0.5)" stroke-width="1"/>
+      <circle cx="20" cy="20" r="5" fill="#f59e0b" opacity="0.9"/>
+      <circle cx="20" cy="20" r="3" fill="#fbbf24"/>
+      <g stroke="#f59e0b" stroke-width="1" opacity="0.7">
+        <line x1="20" y1="13" x2="20" y2="10"/>
+        <line x1="20" y1="27" x2="20" y2="30"/>
+        <line x1="13" y1="20" x2="10" y2="20"/>
+        <line x1="27" y1="20" x2="30" y2="20"/>
+      </g>
+      <circle cx="35" cy="12" r="2" fill="#ffffff" opacity="0.8"/>
+    </svg>`;
+  }
+
+  // ── Left Sidebar ───────────────────────────────────────────────────────────
+  function buildLeftSidebar() {
+    const el = document.getElementById('sidebar-left');
+    if (!el) return;
+
+    const { MODEL_BENCHMARKS } = window.SolarAIData;
+
+    el.innerHTML = `
+      <!-- AI Model Section -->
+      <div class="sidebar-section">
+        <div class="section-header">
+          <div class="section-header-icon">🤖</div>
+          <div class="section-title">AI Model</div>
+        </div>
+        <div class="section-body">
+          <div class="form-group">
+            <label class="form-label">Model Architecture</label>
+            <div class="model-grid">
+              ${MODEL_BENCHMARKS.map(m => `
+                <div class="model-card ${m.recommended ? 'recommended selected' : ''}"
+                     id="mc-${m.name.replace(/[^a-z]/gi,'_')}"
+                     onclick="SolarAIApp.selectModel('${m.name}')">
+                  <div class="model-name">${m.name}</div>
+                  <div class="model-metric">IoU ${(m.iou*100).toFixed(1)}%</div>
+                </div>`).join('')}
             </div>
-          `).join('')}
+          </div>
+          <div class="form-group">
+            <label class="form-label">Satellite Source</label>
+            <select class="form-select" id="source-select" onchange="SolarAIApp.updateSource(this.value)">
+              <option>Sentinel-2</option>
+              <option>Landsat-9</option>
+              <option>IRS Resourcesat-2A</option>
+              <option>Cartosat-3</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Area of Interest (State)</label>
+            <select class="form-select" id="aoi-select" onchange="SolarAIApp.updateAOI(this.value)">
+              <option value="">— All India —</option>
+              <option>Rajasthan</option>
+              <option>Gujarat</option>
+              <option>Karnataka</option>
+              <option>Tamil Nadu</option>
+              <option>Andhra Pradesh</option>
+              <option>Madhya Pradesh</option>
+              <option>Telangana</option>
+              <option>Maharashtra</option>
+              <option>Punjab</option>
+              <option>Haryana</option>
+              <option>Odisha</option>
+              <option>Uttar Pradesh</option>
+              <option>Jharkhand</option>
+              <option>Ladakh (UT)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Confidence Threshold: <span id="conf-val">80%</span></label>
+            <input type="range" class="ctrl-range" id="conf-threshold"
+              min="60" max="99" value="80" style="width:100%;"
+              oninput="document.getElementById('conf-val').textContent=this.value+'%'">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Resolution</label>
+            <div class="res-badge" id="res-label">10m / MSI / L2A — Sentinel-2</div>
+          </div>
         </div>
       </div>
-    </div>
 
-    <!-- Data Source -->
-    <div class="sidebar-section">
-      <div class="section-header">
-        <div class="section-header-icon">🛰</div>
-        <div class="section-title">Data Source</div>
-      </div>
-      <div class="section-body">
-        <div class="form-group">
-          <label class="form-label">Satellite</label>
-          <select class="form-select" id="src-satellite" onchange="App.updateSource(this.value)">
-            <option>Sentinel-2</option>
-            <option>Landsat-9</option>
-            <option>IRS Resourcesat-2A</option>
-            <option>Cartosat-3</option>
-          </select>
+      <!-- Layer Controls -->
+      <div class="sidebar-section">
+        <div class="section-header">
+          <div class="section-header-icon">🗂</div>
+          <div class="section-title">Map Layers</div>
         </div>
-        <div class="form-group">
-          <label class="form-label">Resolution / Product</label>
-          <div class="res-badge">
-            <span>📡</span>
-            <span id="res-label">10m / MSI / L2A</span>
-          </div>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Acquisition Date</label>
-          <div class="res-badge" style="color:var(--text-secondary);border-color:var(--border);background:var(--bg-row-alt);">
-            <span>📅</span>
-            <span>2021-03-15 (Demo)</span>
-          </div>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Area of Interest</label>
-          <select class="form-select" id="aoi-select" onchange="App.updateAOI(this.value)">
-            <option value="india">All India</option>
-            <option value="rajasthan">Rajasthan</option>
-            <option value="karnataka">Karnataka</option>
-            <option value="gujarat">Gujarat</option>
-            <option value="andhra">Andhra Pradesh</option>
-            <option value="tamilnadu">Tamil Nadu</option>
-            <option value="mp">Madhya Pradesh</option>
-          </select>
-        </div>
-      </div>
-    </div>
-
-    <!-- Detection Controls -->
-    <div class="sidebar-section">
-      <div class="section-header">
-        <div class="section-header-icon">⚡</div>
-        <div class="section-title">Detection Run</div>
-      </div>
-      <div class="section-body">
-        <button class="btn-detect" id="btn-detect" onclick="App.runDetection()">
-          ⚡ RUN AI DETECTION
-        </button>
-        <div style="height:7px;"></div>
-        <button class="btn-secondary" onclick="App.clearResults()">✕ Clear Results</button>
-        <div class="progress-wrap" id="detect-progress" style="display:none;margin-top:8px;">
-          <div class="progress-label">
-            <span id="progress-step">Initializing...</span>
-            <span id="progress-pct">0%</span>
-          </div>
-          <div class="progress-bar">
-            <div class="progress-fill scanning" id="progress-fill"></div>
-          </div>
-        </div>
-        <div id="ai-log" style="margin-top:8px;"></div>
-        <div class="detection-summary" id="det-summary" style="display:none;">
-          <div class="det-metric"><span class="dm-val" id="det-count">—</span><span class="dm-label">Farms</span></div>
-          <div class="det-metric"><span class="dm-val" id="det-area">—</span><span class="dm-label">Total Ha</span></div>
-          <div class="det-metric"><span class="dm-val" id="det-conf">—</span><span class="dm-label">Avg Conf</span></div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Layer Controls -->
-    <div class="sidebar-section">
-      <div class="section-header">
-        <div class="section-header-icon">🗂</div>
-        <div class="section-title">Map Layers</div>
-      </div>
-      <div class="section-body">
-        <div class="layer-list">
-          ${[
-            { key:'solarFarms',  color:'#1b7a3e', label:'Solar Farm Polygons' },
-            { key:'ghiHeatmap',  color:'#e8890a', label:'GHI Irradiance Map'  },
-            { key:'stateBounds', color:'#1a4d8f', label:'State Boundaries'    },
-            { key:'candidates',  color:'#7c3aed', label:'Candidate Sites'     },
-            { key:'grid',        color:'#7c3aed', label:'PGCIL Grid Lines'    },
-            { key:'satellite',   color:'#0e7490', label:'Satellite Basemap'   },
-          ].map(l => `
-            <div class="layer-toggle ${AppState.activeLayers[l.key] ? 'active' : ''}"
-                 id="layer-${l.key}" onclick="App.toggleLayer('${l.key}')">
-              <div class="layer-dot" style="background:${l.color};"></div>
-              <span class="layer-name">${l.label}</span>
+        <div class="section-body">
+          <div class="layer-list">
+            <div class="layer-toggle active" id="lt-solarFarms"   onclick="SolarAIApp.toggleLayerUI('solarFarms')">
+              <div class="layer-dot" style="background:#10b981;"></div>
+              <span class="layer-name">Solar Farms</span>
               <div class="toggle-switch"></div>
             </div>
-          `).join('')}
+            <div class="layer-toggle" id="lt-ghiHeatmap"  onclick="SolarAIApp.toggleLayerUI('ghiHeatmap')">
+              <div class="layer-dot" style="background:#f59e0b;"></div>
+              <span class="layer-name">GHI Heatmap</span>
+              <div class="toggle-switch"></div>
+            </div>
+            <div class="layer-toggle" id="lt-candidates"  onclick="SolarAIApp.toggleLayerUI('candidates')">
+              <div class="layer-dot" style="background:#06b6d4;"></div>
+              <span class="layer-name">Candidate Sites</span>
+              <div class="toggle-switch"></div>
+            </div>
+            <div class="layer-toggle" id="lt-grid"        onclick="SolarAIApp.toggleLayerUI('grid')">
+              <div class="layer-dot" style="background:#8b5cf6;"></div>
+              <span class="layer-name">Power Grid (PGCIL)</span>
+              <div class="toggle-switch"></div>
+            </div>
+            <div class="layer-toggle active" id="lt-states" onclick="SolarAIApp.toggleLayerUI('states')">
+              <div class="layer-dot" style="background:#1a4d8f;"></div>
+              <span class="layer-name">State Boundaries</span>
+              <div class="toggle-switch"></div>
+            </div>
+          </div>
         </div>
       </div>
-    </div>
 
-    <!-- Data Attribution -->
-    <div class="sidebar-section" style="background:var(--isro-xpale);">
-      <div class="section-body" style="padding:8px 12px;">
-        <div style="font-size:0.62rem;color:var(--text-muted);line-height:1.6;">
-          📚 <strong style="color:var(--isro-navy);">Data: Microsoft AI4Earth</strong><br>
-          Ortiz et al. 2022 · arXiv:2202.01340<br>
-          1,363 farms · Sentinel-2 · CDLA-2.0
+      <!-- Detection -->
+      <div class="sidebar-section">
+        <div class="section-header">
+          <div class="section-header-icon">⚡</div>
+          <div class="section-title">Detection Run</div>
+        </div>
+        <div class="section-body">
+          <button class="btn-detect" id="btn-detect" onclick="SolarAIApp.runDetection()">⚡ RUN DETECTION</button>
+          <div id="detect-progress" style="display:none;margin-top:8px;">
+            <div class="progress-label">
+              <span id="progress-step" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Initialising...</span>
+              <span id="progress-pct">0%</span>
+            </div>
+            <div class="progress-bar"><div class="progress-fill scanning" id="progress-fill" style="width:0%"></div></div>
+          </div>
+          <div id="ai-log" style="margin-top:8px;"></div>
         </div>
       </div>
-    </div>
-  `;
 
-  // Add initial log entry
-  addLog('SolarAI v3.2 initialized — NRSC/ISRO platform ready.', 'success');
-  addLog(`Dataset: Microsoft AI4Earth India Solar (Ortiz et al. 2022)`, 'active');
-  addLog(`Model: ${AppState.selectedModel} | Satellite: ${AppState.selectedSource}`, 'active');
-}
+      <!-- Farm list -->
+      <div class="sidebar-section">
+        <div class="section-header">
+          <div class="section-header-icon">📋</div>
+          <div class="section-title">Farm Registry</div>
+        </div>
+        <div class="section-body" style="max-height:220px;overflow-y:auto;padding:6px 10px;">
+          <div id="farm-list">${buildFarmListHTML()}</div>
+        </div>
+      </div>`;
+  }
 
-// ─── RIGHT SIDEBAR ────────────────────────────────────────────────────────────
-function buildSidebarRight() {
-  const { NATIONAL_KPI } = window.SolarAIData;
-  const sidebar = document.getElementById('sidebar-right');
+  function buildFarmListHTML() {
+    const farms = window.SolarAIData.SOLAR_FARMS_GEOJSON.features;
+    return farms.map(f => {
+      const p = f.properties;
+      const c = p.confidence >= 90 ? '#10b981' : p.confidence >= 80 ? '#f59e0b' : '#ef4444';
+      return `<div class="farm-item" onclick="SolarAIMap.flyToFarm(${p.fid})" id="farm-item-${p.fid}">
+        <span style="color:${c};font-size:0.9rem;flex-shrink:0;">●</span>
+        <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${p.name || 'Farm #' + p.fid}</span>
+        <span style="color:${c};font-family:'Roboto Mono',monospace;font-size:0.67rem;flex-shrink:0;">${p.confidence.toFixed(0)}%</span>
+      </div>`;
+    }).join('');
+  }
 
-  sidebar.innerHTML = `
-    <!-- KPI Cards -->
-    <div class="sidebar-section">
-      <div class="section-title">National Summary</div>
+  // ── Right Sidebar ──────────────────────────────────────────────────────────
+  function buildRightSidebar() {
+    const el = document.getElementById('sidebar-right');
+    if (!el) return;
+
+    el.innerHTML = `
+      <!-- KPI Cards -->
       <div class="kpi-grid">
         <div class="kpi-card solar">
           <div class="kpi-icon">☀️</div>
@@ -337,1093 +289,763 @@ function buildSidebarRight() {
         <div class="kpi-card blue">
           <div class="kpi-icon">⚡</div>
           <span class="kpi-val blue" id="kpi-gw">0</span>
-          <div class="kpi-label">GW Capacity</div>
+          <div class="kpi-label">Capacity (GW)</div>
         </div>
         <div class="kpi-card green">
-          <div class="kpi-icon">🌿</div>
-          <span class="kpi-val green" id="kpi-co2">0</span>
-          <div class="kpi-label">MT CO₂/yr Avoided</div>
-        </div>
-        <div class="kpi-card cyan">
-          <div class="kpi-icon">🏛️</div>
-          <span class="kpi-val cyan" id="kpi-states">0</span>
+          <div class="kpi-icon">🗺</div>
+          <span class="kpi-val green" id="kpi-states">0</span>
           <div class="kpi-label">States Covered</div>
         </div>
-        <div class="kpi-card orange">
-          <div class="kpi-icon">🏠</div>
-          <span class="kpi-val orange" id="kpi-hh">0</span>
-          <div class="kpi-label">Households Powered</div>
+        <div class="kpi-card cyan">
+          <div class="kpi-icon">🌱</div>
+          <span class="kpi-val cyan" id="kpi-co2">0</span>
+          <div class="kpi-label">CO₂ Avoided (MT)</div>
         </div>
         <div class="kpi-card purple">
           <div class="kpi-icon">🎯</div>
-          <span class="kpi-val purple" id="kpi-iou">0%</span>
-          <div class="kpi-label">Mean IoU Score</div>
+          <span class="kpi-val purple" id="kpi-iou">0</span>
+          <div class="kpi-label">Mean IoU</div>
+        </div>
+        <div class="kpi-card orange">
+          <div class="kpi-icon">🏘</div>
+          <span class="kpi-val orange" id="kpi-hh">0</span>
+          <div class="kpi-label">Households (M)</div>
         </div>
       </div>
-    </div>
 
-    <!-- State Breakdown Donut -->
-    <div class="chart-wrap">
-      <div class="chart-title">Farms by State</div>
-      <div style="height:160px;"><canvas id="chart-state-donut"></canvas></div>
-    </div>
-
-    <!-- Temporal Growth Line -->
-    <div class="chart-wrap">
-      <div class="chart-title">Growth Trend 2015–2026</div>
-      <div style="height:130px;"><canvas id="chart-temporal"></canvas></div>
-    </div>
-
-    <!-- GHI Bar -->
-    <div class="chart-wrap">
-      <div class="chart-title">Solar Resource (GHI)</div>
-      <div style="height:160px;"><canvas id="chart-ghi"></canvas></div>
-    </div>
-
-    <!-- Data Source Note -->
-    <div class="chart-wrap" style="background:var(--isro-xpale);border-top:2px solid var(--isro-blue);">
-      <div style="font-size:0.62rem;color:var(--text-muted);line-height:1.6;">
-        📚 <strong style="color:var(--isro-navy);">Data Source</strong><br>
-        Microsoft AI4Earth Solar Farm India Dataset<br>
-        Ortiz et al. (2022) — arXiv:2202.01340<br>
-        1,363 farms · Sentinel-2 · U-Net · 92% accuracy<br>
-        <a href="https://github.com/microsoft/solar-farms-mapping" target="_blank"
-           style="color:var(--isro-light);font-size:0.59rem;">↗ github.com/microsoft/solar-farms-mapping</a>
+      <!-- State Donut -->
+      <div class="chart-wrap">
+        <div class="chart-title">📊 State Distribution (2021)</div>
+        <div style="position:relative;height:170px;"><canvas id="chart-state-donut"></canvas></div>
       </div>
-    </div>
-  `;
-}
 
-// ─── CENTER PANEL ────────────────────────────────────────────────────────────
-function buildCenterPanel() {
-  const center = document.getElementById('center-panel');
+      <!-- Temporal Line -->
+      <div class="chart-wrap">
+        <div class="chart-title">📈 National Growth</div>
+        <div style="position:relative;height:140px;"><canvas id="chart-temporal"></canvas></div>
+      </div>
 
-  center.innerHTML = `
-    <div id="map-container">
-      <div id="map"></div>
-      <div id="scan-overlay"><div class="scan-grid"></div><div class="scan-line"></div></div>
+      <!-- GHI Bar -->
+      <div class="chart-wrap">
+        <div class="chart-title">🌞 GHI by Region (kWh/m²/yr)</div>
+        <div style="position:relative;height:175px;"><canvas id="chart-ghi"></canvas></div>
+      </div>
 
-      <!-- Map Toolbar -->
+      <!-- Model Benchmarks -->
+      <div class="chart-wrap">
+        <div class="chart-title">🤖 Model Benchmarks</div>
+        <div style="position:relative;height:145px;"><canvas id="chart-model-perf"></canvas></div>
+      </div>
+
+      <!-- Export -->
+      <div class="chart-wrap" style="padding-bottom:14px;">
+        <div class="chart-title">📤 Export</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+          <button class="export-btn" onclick="SolarAIApp.exportGeoJSON()">📦 GeoJSON</button>
+          <button class="export-btn" onclick="SolarAIApp.exportCSV()">📊 CSV</button>
+          <button class="export-btn" onclick="SolarAIApp.generateReport()">📄 Report</button>
+        </div>
+      </div>`;
+  }
+
+  // ── Center Panel ───────────────────────────────────────────────────────────
+  function buildCenterPanel() {
+    const el = document.getElementById('center-panel');
+    if (!el) return;
+
+    el.innerHTML = `
+      <!-- Map toolbar -->
       <div id="map-toolbar">
-        <button class="map-tool-btn active" id="mt-pan" onclick="App.setMapTool('pan')">✋ Pan</button>
-        <button class="map-tool-btn" id="mt-select" onclick="App.setMapTool('select')">⬜ Select</button>
-        <button class="map-tool-btn" id="mt-measure" onclick="App.setMapTool('measure')">📏 Measure</button>
-        <span style="color:var(--border);margin:0 2px;">|</span>
-        <button class="map-tool-btn" id="mt-india" onclick="App.flyToIndia()">🇮🇳 India</button>
-        <button class="map-tool-btn" id="mt-rajasthan" onclick="App.flyToState('rajasthan')">Rajasthan</button>
-        <button class="map-tool-btn" id="mt-karnataka" onclick="App.flyToState('karnataka')">Karnataka</button>
+        <button class="map-tool-btn active" id="mt-pan" onclick="SolarAIApp.setMapTool('pan')">✋ Pan</button>
+        <button class="map-tool-btn" id="mt-identify" onclick="SolarAIApp.setMapTool('identify')">🔍 Identify</button>
+        <button class="map-tool-btn" id="mt-measure" onclick="SolarAIApp.setMapTool('measure')">📏 Measure</button>
+        <button class="map-tool-btn" id="mt-fullscreen" onclick="SolarAIApp.toggleFullscreen()">⛶ Fullscreen</button>
       </div>
 
-      <!-- Map Info Bar -->
-      <div id="map-info">
-        <div class="map-stat">
-          <span class="ms-val">1,363</span>
-          <span class="ms-label">Farms Mapped</span>
-        </div>
-        <div class="map-stat">
-          <span class="ms-val">~91.8 GW</span>
-          <span class="ms-label">Est. Capacity</span>
-        </div>
-        <div class="map-stat">
-          <span class="ms-val">92.4%</span>
-          <span class="ms-label">Model Accuracy</span>
-        </div>
-        <div class="map-stat">
-          <span class="ms-val">2021</span>
-          <span class="ms-label">Dataset Year</span>
+      <!-- Map -->
+      <div id="map-container">
+        <div id="map"></div>
+        <div id="scan-overlay"><div class="scan-line"></div><div class="scan-grid"></div></div>
+        <div id="map-info">
+          <div class="map-stat"><span class="ms-val" id="ms-farms">18</span><div class="ms-label">Farms Visible</div></div>
+          <div class="map-stat"><span class="ms-val" id="ms-area">78 k</span><div class="ms-label">km² Detected</div></div>
+          <div class="map-stat"><span class="ms-val" id="ms-zoom">5</span><div class="ms-label">Zoom Level</div></div>
         </div>
       </div>
-    </div>
 
-    <!-- Bottom Results Panel -->
-    <div id="bottom-panel">
-      <div class="bottom-header">
-        <span class="bottom-title" id="bottom-title">🔍 Detection Results — <span id="result-count">0</span> farms</span>
-        <div class="export-btns">
-          <button class="export-btn" onclick="App.exportGeoJSON()">📦 GeoJSON</button>
-          <button class="export-btn" onclick="App.exportCSV()">📊 CSV</button>
-          <button class="export-btn active" onclick="App.generateReport()">📄 Report</button>
+      <!-- Bottom panel (results table) -->
+      <div id="bottom-panel">
+        <div class="bottom-header">
+          <div class="bottom-title" id="det-summary">Detection Results — click a farm or run scan</div>
+          <div class="export-btns">
+            <button class="export-btn" onclick="SolarAIApp.exportGeoJSON()">📦 GeoJSON</button>
+            <button class="export-btn" onclick="SolarAIApp.exportCSV()">📊 CSV</button>
+            <button class="export-btn" onclick="document.getElementById('bottom-panel').classList.remove('open')">✕</button>
+          </div>
         </div>
-        <button class="btn-secondary" style="width:auto;padding:4px 10px;font-size:0.68rem;" onclick="App.toggleBottomPanel()">✕ Close</button>
+        <div id="results-table-wrap">
+          <table id="results-table">
+            <thead>
+              <tr>
+                <th>#</th><th>Name</th><th>State</th><th>Lat</th><th>Lon</th>
+                <th>Area (ha)</th><th>Capacity (MW)</th><th>GHI</th><th>Confidence</th><th>Model</th>
+              </tr>
+            </thead>
+            <tbody id="results-tbody"></tbody>
+          </table>
+        </div>
+      </div>`;
+
+    // Wire zoom display
+    setTimeout(() => {
+      const map = window.SolarAIMap.getMap();
+      if (map) {
+        map.on('zoomend', () => {
+          const el = document.getElementById('ms-zoom');
+          if (el) el.textContent = map.getZoom();
+        });
+      }
+    }, 1500);
+  }
+
+  // ── Suitability Tab ────────────────────────────────────────────────────────
+  function buildSuitabilityTab() {
+    const el = document.getElementById('tab-suitability');
+    if (!el) return;
+    const { SUITABILITY_CANDIDATES } = window.SolarAIData;
+
+    el.innerHTML = `
+      <div class="tc-header">
+        <div class="tc-title">📍 Site Suitability Analysis — Multi-Criteria Decision Analysis (MCDA)</div>
+        <div class="tc-subtitle">NRSC GIS Division · ${new Date().getFullYear()}</div>
       </div>
-      <div id="results-table-wrap">
-        <table id="results-table">
-          <thead>
-            <tr>
-              <th>FID</th><th>Farm Name</th><th>State</th>
-              <th>Area (ha)</th><th>Capacity (MW)</th><th>GHI</th>
-              <th>Confidence</th><th>LULC</th><th>Status</th>
-            </tr>
-          </thead>
-          <tbody id="results-tbody"></tbody>
-        </table>
-      </div>
-    </div>
-  `;
-}
-
-// ─── TAB CONTENTS ─────────────────────────────────────────────────────────────
-function buildTabContents() {
-  buildSuitabilityTab();
-  buildChangeDetectionTab();
-  buildReportsTab();
-}
-
-function buildSuitabilityTab() {
-  const { SUITABILITY_CANDIDATES } = window.SolarAIData;
-  const tab = document.getElementById('tab-suitability');
-  if (!tab) return;
-
-  tab.innerHTML = `
-    <div class="tc-header">
-      <span class="tc-title">📊 Site Suitability Analysis</span>
-      <span style="font-size:0.7rem;color:var(--text-muted);">MCDA Framework · 5 Criteria · Weighted Scoring</span>
-      <span class="tc-subtitle">NRSC India Wasteland Atlas 2019/2022 | NASA POWER GHI</span>
-    </div>
-    <div class="tc-body">
-      <div class="suitability-grid">
-        <!-- Left: Controls + Candidate List -->
-        <div>
-          <div class="suit-controls" style="margin-bottom:16px;">
-            <div class="sidebar-section" style="margin-bottom:0;">
-              <div class="section-title">Criteria Weights</div>
-              ${[
-                { key:'solar', label:'Solar Resource', pct:30, color:'#f59e0b' },
-                { key:'terrain', label:'Terrain', pct:20, color:'#10b981' },
-                { key:'lulc', label:'Land Use/Cover', pct:25, color:'#06b6d4' },
-                { key:'infra', label:'Infrastructure', pct:15, color:'#8b5cf6' },
-                { key:'env', label:'Environment', pct:10, color:'#f97316' },
-              ].map(c => `
-                <div style="margin-bottom:8px;">
-                  <div class="form-label" style="display:flex;justify-content:space-between;">
-                    <span>${c.label}</span>
-                    <span style="color:${c.color};font-family:'JetBrains Mono',monospace;font-size:0.7rem;">${c.pct}%</span>
+      <div class="tc-body">
+        <div class="suitability-grid">
+          <!-- Left: candidate cards -->
+          <div class="suit-controls">
+            <div class="suit-candidate-list" id="suit-candidate-list">
+              ${SUITABILITY_CANDIDATES.map(site => `
+                <div class="suit-card" id="sc-${site.id}" onclick="SolarAIApp.selectCandidate('${site.id}')">
+                  <div class="suit-card-top">
+                    <div class="suit-score-ring">
+                      <svg viewBox="0 0 46 46">
+                        <circle cx="23" cy="23" r="19" fill="none" stroke="#dde5ef" stroke-width="4"/>
+                        <circle cx="23" cy="23" r="19" fill="none"
+                          stroke="${site.grade==='HIGH'?'#1b7a3e':site.grade==='MEDIUM'?'#b45309':'#d97706'}"
+                          stroke-width="4" stroke-dasharray="${site.total * 1.195} 119.5"
+                          stroke-linecap="round" transform="rotate(-90 23 23)"/>
+                      </svg>
+                      <div class="suit-score-val">${site.total}</div>
+                    </div>
+                    <div class="suit-meta">
+                      <div class="suit-name">${site.name}</div>
+                      <div class="suit-state">${site.state}</div>
+                    </div>
+                    <span class="grade-badge grade-${site.grade}">${site.grade}</span>
                   </div>
-                  <div class="progress-bar" style="height:5px;">
-                    <div class="progress-fill" style="width:${c.pct}%;background:${c.color};"></div>
+                  <div class="suit-sub-bars">
+                    ${Object.entries(site.scores).map(([k,v]) => `
+                      <div class="sub-bar-row">
+                        <div class="sub-bar-label">${k.charAt(0).toUpperCase()+k.slice(1)}</div>
+                        <div class="sub-bar-track">
+                          <div class="sub-bar-fill" style="width:${v}%;background:${v>=85?'#1b7a3e':v>=70?'#f59e0b':'#ef4444'};"></div>
+                        </div>
+                        <div class="sub-bar-val">${v}</div>
+                      </div>`).join('')}
                   </div>
-                </div>
-              `).join('')}
-              <div style="font-size:0.62rem;color:var(--text-muted);margin-top:6px;">
-                Based on NRSC MCDA framework · CEA grid data · FSI forest boundaries
-              </div>
+                </div>`).join('')}
             </div>
           </div>
-
-          <div class="section-title">Candidate Sites (${SUITABILITY_CANDIDATES.length})</div>
-          <div class="suit-candidate-list">
-            ${SUITABILITY_CANDIDATES.map(site => buildCandidateCard(site)).join('')}
+          <!-- Right: detail panel -->
+          <div class="suit-detail" id="suit-detail">
+            <div class="detail-placeholder">
+              <div class="ph-icon">📍</div>
+              <p>Select a candidate site to view full analysis, radar chart and recommendations.</p>
+            </div>
           </div>
         </div>
+      </div>`;
+  }
 
-        <!-- Right: Detail Panel -->
-        <div class="suit-detail" id="suit-detail-panel">
-          <div class="detail-placeholder">
-            <div class="ph-icon">🗺️</div>
-            <p>Select a candidate site to view<br>detailed suitability analysis</p>
-          </div>
-        </div>
+  // ── Change Detection Tab ───────────────────────────────────────────────────
+  function buildChangeTab() {
+    const el = document.getElementById('tab-change');
+    if (!el) return;
+    const { TEMPORAL_DATA } = window.SolarAIData;
+
+    el.innerHTML = `
+      <div class="tc-header">
+        <div class="tc-title">📈 Temporal Change Detection — Solar Farm Expansion</div>
+        <div class="tc-subtitle">Sentinel-2 Multi-Temporal Analysis</div>
       </div>
-    </div>
-  `;
-}
+      <div class="tc-body">
+        <div style="display:flex;gap:14px;align-items:center;margin-bottom:18px;flex-wrap:wrap;">
+          <label style="font-size:0.78rem;color:var(--text-secondary);">
+            From: <select id="cd-from" class="form-select" style="width:auto;display:inline-block;margin-left:6px;">
+              ${TEMPORAL_DATA.years.slice(0,-1).map(y => `<option${y===2016?' selected':''}>${y}</option>`).join('')}
+            </select>
+          </label>
+          <label style="font-size:0.78rem;color:var(--text-secondary);">
+            To: <select id="cd-to" class="form-select" style="width:auto;display:inline-block;margin-left:6px;">
+              ${TEMPORAL_DATA.years.slice(1).map(y => `<option${y===2023?' selected':''}>${y}</option>`).join('')}
+            </select>
+          </label>
+          <button class="btn-detect" style="width:auto;padding:7px 20px;" onclick="SolarAIApp.updateChangeChart()">Apply</button>
+        </div>
+        <div style="background:var(--bg-panel);border:1px solid var(--border);border-radius:var(--r-lg);padding:16px;">
+          <div style="position:relative;height:300px;max-width:900px;margin:0 auto;">
+            <canvas id="chart-new-farms"></canvas>
+          </div>
+        </div>
+        <div style="margin-top:16px;display:grid;grid-template-columns:repeat(3,1fr);gap:12px;">
+          <div style="background:var(--bg-panel);border:1px solid var(--border);border-radius:var(--r-md);padding:14px;text-align:center;">
+            <div style="font-family:'Roboto Mono',monospace;font-size:1.4rem;font-weight:700;color:var(--success);">+1,363</div>
+            <div style="font-size:0.67rem;color:var(--text-muted);margin-top:2px;">Total Farms Detected (2021)</div>
+          </div>
+          <div style="background:var(--bg-panel);border:1px solid var(--border);border-radius:var(--r-md);padding:14px;text-align:center;">
+            <div style="font-family:'Roboto Mono',monospace;font-size:1.4rem;font-weight:700;color:var(--solar);">+87.8 GW</div>
+            <div style="font-size:0.67rem;color:var(--text-muted);margin-top:2px;">Capacity Growth (2015–2024)</div>
+          </div>
+          <div style="background:var(--bg-panel);border:1px solid var(--border);border-radius:var(--r-md);padding:14px;text-align:center;">
+            <div style="font-family:'Roboto Mono',monospace;font-size:1.4rem;font-weight:700;color:var(--isro-mid);">7,800 km²</div>
+            <div style="font-size:0.67rem;color:var(--text-muted);margin-top:2px;">Total Land Area (2024)</div>
+          </div>
+        </div>
+      </div>`;
 
-function buildCandidateCard(site) {
-  const barColors = {
-    solar:'#f59e0b', terrain:'#10b981', lulc:'#06b6d4', infra:'#8b5cf6', env:'#f97316'
-  };
-  const subBars = Object.entries(site.scores).map(([key, val]) => `
-    <div class="sub-bar-row">
-      <span class="sub-bar-label">${key.charAt(0).toUpperCase()+key.slice(1)}</span>
-      <div class="sub-bar-track">
-        <div class="sub-bar-fill" style="width:${val}%;background:${barColors[key]};"></div>
+    setTimeout(() => window.SolarAICharts.renderNewFarmsBar('chart-new-farms', 2016, 2023), 900);
+  }
+
+  // ── Reports Tab ────────────────────────────────────────────────────────────
+  function buildReportsTab() {
+    const el = document.getElementById('tab-reports');
+    if (!el) return;
+    const { NATIONAL_KPI } = window.SolarAIData;
+
+    el.innerHTML = `
+      <div class="tc-header">
+        <div class="tc-title">📋 National Solar Intelligence Report — NRSC/ISRO</div>
+        <div class="tc-subtitle">Sentinel-2 · SegFormer-B5 · ${new Date().getFullYear()}</div>
       </div>
-      <span class="sub-bar-val">${val}</span>
-    </div>
-  `).join('');
-
-  // SVG ring for score
-  const r = 20, c = 26, circ = 2 * Math.PI * r;
-  const dash = (site.total / 100) * circ;
-  const color = site.grade === 'HIGH' ? '#10b981' : site.grade === 'MEDIUM' ? '#f59e0b' : '#f97316';
-
-  return `
-    <div class="suit-card" id="suit-card-${site.id}" onclick="App.selectCandidate('${site.id}')">
-      <div class="suit-card-top">
-        <div class="suit-score-ring">
-          <svg viewBox="0 0 52 52">
-            <circle cx="${c}" cy="${c}" r="${r}" fill="none" stroke="rgba(30,74,115,0.4)" stroke-width="4"/>
-            <circle cx="${c}" cy="${c}" r="${r}" fill="none" stroke="${color}" stroke-width="4"
-                    stroke-dasharray="${dash.toFixed(1)} ${circ.toFixed(1)}"
-                    stroke-linecap="round" transform="rotate(-90 26 26)"/>
-          </svg>
-          <div class="suit-score-val">${site.total}</div>
-        </div>
-        <div class="suit-meta">
-          <div class="suit-name">${site.name}</div>
-          <div class="suit-state">📍 ${site.state}</div>
-        </div>
-        <div class="grade-badge grade-${site.grade}">${site.grade}</div>
-      </div>
-      <div class="suit-sub-bars">${subBars}</div>
-    </div>
-  `;
-}
-
-function buildChangeDetectionTab() {
-  const tab = document.getElementById('tab-change');
-  if (!tab) return;
-  const { TEMPORAL_DATA } = window.SolarAIData;
-
-  const newFarms2020_2024 = [
-    { name:'Adani Green Rajasthan', state:'Rajasthan', area:'4,200 ha', year:2021 },
-    { name:'ReNew Power Bikaner',   state:'Rajasthan', area:'1,800 ha', year:2022 },
-    { name:'NTPC Rewa Extension',   state:'MP',         area:'950 ha',  year:2022 },
-    { name:'Azure Power AP',         state:'Andhra Pradesh', area:'1,200 ha', year:2023 },
-    { name:'Greenko Kurnool',        state:'Andhra Pradesh', area:'800 ha',   year:2023 },
-    { name:'Torrent Gujarat',        state:'Gujarat',   area:'2,100 ha', year:2024 },
-    { name:'JSW Energy Karnataka',   state:'Karnataka', area:'650 ha',   year:2024 },
-  ];
-
-  tab.innerHTML = `
-    <div class="tc-header">
-      <span class="tc-title">📅 Temporal Change Detection</span>
-      <span style="font-size:0.7rem;color:var(--text-muted);">Multi-temporal Sentinel-2 Stack · 2015–2026</span>
-      <span class="tc-subtitle">Annual interval analysis · State/District scale</span>
-    </div>
-    <div class="tc-body">
-      <div class="change-grid">
-        <div class="change-controls">
-          <div class="sidebar-section">
-            <div class="section-title">Date Range</div>
-            <div class="year-range">
-              <div class="form-group">
-                <label class="form-label">From Year</label>
-                <select class="form-select" id="year-from" onchange="App.updateChangeYears()">
-                  ${TEMPORAL_DATA.years.map(y => `<option ${y===AppState.changeYearFrom?'selected':''}>${y}</option>`).join('')}
-                </select>
-              </div>
-              <div class="form-group">
-                <label class="form-label">To Year</label>
-                <select class="form-select" id="year-to" onchange="App.updateChangeYears()">
-                  ${TEMPORAL_DATA.years.map(y => `<option ${y===AppState.changeYearTo?'selected':''}>${y}</option>`).join('')}
-                </select>
-              </div>
-            </div>
-            <button class="btn-detect" style="margin-top:4px;" onclick="App.runChangeDetection()">
-              🔄 ANALYZE CHANGES
-            </button>
+      <div class="tc-body">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;">
+          <div style="background:var(--bg-panel);border:1px solid var(--border);border-radius:var(--r-lg);padding:18px;border-top:4px solid var(--solar);">
+            <h3 style="font-size:0.9rem;font-weight:700;color:var(--isro-navy);margin-bottom:12px;">Executive Summary</h3>
+            <p style="font-size:0.8rem;color:var(--text-secondary);line-height:1.7;">
+              SolarAI has processed multi-temporal Sentinel-2 imagery across
+              <strong>${NATIONAL_KPI.states_covered} states</strong> of India,
+              detecting <strong>${NATIONAL_KPI.total_farms.toLocaleString()} solar farms</strong>
+              with a total estimated capacity of <strong>${NATIONAL_KPI.total_capacity_gw} GW</strong>.
+              The SegFormer-B5 model achieved a mean IoU of
+              <strong>${(NATIONAL_KPI.mean_iou*100).toFixed(1)}%</strong>,
+              surpassing all baseline models tested.
+            </p>
           </div>
-
-          <div class="change-stat-grid" id="change-stats">
-            <div class="change-stat">
-              <span class="cs-val" id="cs-new">+412</span>
-              <span class="cs-delta delta-pos">▲ Commissioned</span>
-              <span class="cs-label">New Farms</span>
-            </div>
-            <div class="change-stat">
-              <span class="cs-val" id="cs-area">+3,420 km²</span>
-              <span class="cs-delta delta-pos">▲ Area Delta</span>
-              <span class="cs-label">Footprint Growth</span>
-            </div>
-            <div class="change-stat">
-              <span class="cs-val" id="cs-cap">+45.4 GW</span>
-              <span class="cs-delta delta-pos">▲ Capacity Added</span>
-              <span class="cs-label">Energy Growth</span>
-            </div>
-            <div class="change-stat">
-              <span class="cs-val" id="cs-decomm" style="color:var(--accent-red);">3</span>
-              <span class="cs-delta delta-neg">▼ Flagged</span>
-              <span class="cs-label">Decommissioned</span>
-            </div>
-          </div>
-
-          <div class="sidebar-section">
-            <div class="section-title" style="margin-bottom:10px;">Newly Commissioned Farms</div>
-            <div class="new-farms-list">
-              ${newFarms2020_2024.map(f => `
-                <div class="new-farm-item">
-                  <div class="nfi-dot"></div>
-                  <div class="nfi-name">${f.name}</div>
-                  <div class="nfi-state">${f.state}</div>
-                  <div class="nfi-area">${f.area}</div>
-                  <div style="font-size:0.6rem;color:var(--text-muted);margin-left:4px;">${f.year}</div>
-                </div>
-              `).join('')}
-            </div>
+          <div style="background:var(--bg-panel);border:1px solid var(--border);border-radius:var(--r-lg);padding:18px;border-top:4px solid var(--isro-blue);">
+            <h3 style="font-size:0.9rem;font-weight:700;color:var(--isro-navy);margin-bottom:12px;">Data Sources &amp; Methodology</h3>
+            <p style="font-size:0.8rem;color:var(--text-secondary);line-height:1.7;">
+              Imagery: ESA Copernicus Sentinel-2 at 10m resolution (MSI L2A).<br>
+              Model: SegFormer-B5 (84.7M params) trained on ISFD-v2.<br>
+              Site suitability via MCDA (GHI, terrain, LULC, infrastructure, environment).<br>
+              Dataset: <em>Microsoft AI4Earth Solar Farm India</em> (Ortiz et al., 2022).
+            </p>
           </div>
         </div>
 
-        <div>
-          <div class="chart-wrap" style="margin-bottom:16px;">
-            <div class="chart-title">New Farms & Cumulative Area</div>
-            <div style="height:200px;"><canvas id="chart-change-bar"></canvas></div>
-          </div>
-          <div class="chart-wrap">
-            <div class="chart-title">India Solar Growth Trajectory</div>
-            <div style="height:200px;"><canvas id="chart-change-growth"></canvas></div>
-          </div>
+        <div style="background:var(--bg-panel);border:1px solid var(--border);border-radius:var(--r-lg);padding:18px;margin-bottom:16px;">
+          <h3 style="font-size:0.9rem;font-weight:700;color:var(--isro-navy);margin-bottom:12px;">Key Findings</h3>
+          <ul style="font-size:0.8rem;color:var(--text-secondary);line-height:2;padding-left:20px;">
+            <li>Rajasthan leads with the highest installed capacity (GHI &gt;2000 kWh/m²/yr in Thar Desert)</li>
+            <li>Gujarat and Karnataka follow as major solar corridors</li>
+            <li>CO₂ avoided annually: <strong>${NATIONAL_KPI.co2_avoided_mt} MT</strong></li>
+            <li>Equivalent to powering <strong>87.5 million households</strong></li>
+            <li>74.2% of farms built on ecologically non-sensitive land (wasteland/barren)</li>
+          </ul>
         </div>
-      </div>
-    </div>
-  `;
 
-  // Render change charts
-  setTimeout(() => {
-    window.SolarAICharts.renderNewFarmsBar('chart-change-bar', AppState.changeYearFrom, AppState.changeYearTo);
-    window.SolarAICharts.renderTemporalLine('chart-change-growth');
-  }, 100);
-}
-
-function buildReportsTab() {
-  const tab = document.getElementById('tab-reports');
-  if (!tab) return;
-  const { NATIONAL_KPI } = window.SolarAIData;
-
-  tab.innerHTML = `
-    <div class="tc-header">
-      <span class="tc-title">📄 Reports & Compliance</span>
-      <span style="font-size:0.7rem;color:var(--text-muted);">ISRO/NRSC format · PDF/CSV/GeoJSON export</span>
-      <span class="tc-subtitle">Regulatory compliance · Environmental Impact Assessment</span>
-    </div>
-    <div class="tc-body">
-      <div class="reports-grid">
-        <div class="report-card-list">
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;">
           ${[
-            { icon:'📋', title:'Executive Summary Report', desc:'High-level summary of all detected solar farms, national statistics, and AI model performance metrics in NRSC report format.' },
-            { icon:'🗺️', title:'Geospatial Detection Report', desc:'Full GeoJSON export with all detected polygons, confidence scores, area measurements, and environmental impact data.' },
-            { icon:'📊', title:'Suitability Analysis Report', desc:'Ranked list of candidate sites with MCDA sub-scores, regulatory compliance status, and investment recommendations.' },
-            { icon:'📅', title:'Change Detection Report', desc:'Multi-temporal analysis comparing selected date ranges — new commissioning, decommissioning, and expansion events.' },
-            { icon:'🌿', title:'Environmental Impact Assessment', desc:'CO₂ avoidance, biodiversity risk, land use change classification per Regulation 7(3) of Environment Protection Act 1986.' },
+            { title:'Technical Report', desc:'Full methodology, model architecture, training data statistics', icon:'🔬' },
+            { title:'Policy Brief', desc:'Recommendations for MNRE solar target 2030 achievement', icon:'📜' },
+            { title:'State-wise Analysis', desc:'Detailed per-state farm inventory and suitability ranking', icon:'🗺' },
           ].map(r => `
-            <div class="report-card" onclick="App.generateReport('${r.title}')">
+            <div class="report-card">
               <div class="rc-icon">${r.icon}</div>
               <div class="rc-title">${r.title}</div>
               <div class="rc-desc">${r.desc}</div>
-              <div class="rc-generate">📥 Generate Report</div>
-            </div>
-          `).join('')}
+              <button class="rc-generate" onclick="SolarAIApp.generateReport('${r.title}')">Generate →</button>
+            </div>`).join('')}
         </div>
+      </div>`;
+  }
 
-        <div class="compliance-section">
-          <div class="compliance-card">
-            <div class="compliance-title">🔒 Regulatory Compliance Checklist</div>
-            <div class="checklist">
-              ${[
-                { icon:'✓', cls:'check-pass', text:'Forest Conservation Act, 1980', sub:'500m setback buffer applied' },
-                { icon:'✓', cls:'check-pass', text:'Wildlife Protection Act, 1972', sub:'1km wildlife sanctuary buffer' },
-                { icon:'✓', cls:'check-pass', text:'Ramsar Wetland Sites',          sub:'Excluded from candidate zones' },
-                { icon:'✓', cls:'check-pass', text:'CRZ Notification, 2019',         sub:'Coastal 500m excluded' },
-                { icon:'⚠', cls:'check-warn', text:'Agricultural Land (Kharif/Rabi)', sub:'Manual verification recommended' },
-                { icon:'✓', cls:'check-pass', text:'NRSC Wasteland Atlas 2022',      sub:'LULC classification validated' },
-                { icon:'✓', cls:'check-pass', text:'CEA Grid Proximity Check',        sub:'PGCIL transmission corridors loaded' },
-                { icon:'⚠', cls:'check-warn', text:'Biodiversity Impact Assessment',  sub:'Site-specific survey required >100 ha' },
-              ].map(c => `
-                <div class="check-item">
-                  <div class="check-icon ${c.cls}">${c.icon}</div>
-                  <div class="check-text">${c.text}<span>${c.sub}</span></div>
-                </div>
-              `).join('')}
-            </div>
-          </div>
+  // ── AI Detection log steps ─────────────────────────────────────────────────
+  const DETECTION_STEPS = [
+    { msg:'Initialising SolarAI pipeline v3.2…',              type:'active',  delay:0    },
+    { msg:'Loading Sentinel-2 L2A tiles (10m MSI)…',          type:'active',  delay:400  },
+    { msg:'Applying cloud mask (Fmask v4.2) — Cover: 3.1%',   type:'success', delay:800  },
+    { msg:'Computing NDVI / NDWI / BI spectral indices…',      type:'active',  delay:1200 },
+    { msg:'NDVI threshold: −0.15 | Suppressing vegetation…',   type:'active',  delay:1600 },
+    { msg:'Suppressing water bodies (NDWI < −0.30)…',          type:'active',  delay:1950 },
+    { msg:'Running SegFormer-B5 inference (84.7M params)…',    type:'active',  delay:2350 },
+    { msg:'Semantic segmentation complete — IoU: 0.891',       type:'success', delay:3100 },
+    { msg:'Post-processing: Vectorising binary mask…',         type:'active',  delay:3500 },
+    { msg:'Applying minimum area filter (1 ha)…',              type:'active',  delay:3850 },
+    { msg:'Merging proximate polygons (50m threshold)…',       type:'active',  delay:4200 },
+    { msg:'Running Hard Negative Mining (HNM) filter…',        type:'active',  delay:4550 },
+    { msg:'Suppressed 23 false positives (rooftops, riverbeds)…', type:'warn', delay:4900 },
+    { msg:'Detected 18 high-confidence solar farms.',          type:'success', delay:5300 },
+    { msg:'Total capacity estimate: 9,178 MW',                 type:'success', delay:5600 },
+    { msg:'Detection complete ✓',                              type:'success', delay:5900 },
+  ];
 
-          <div class="compliance-card">
-            <div class="compliance-title">📈 National Statistics Summary</div>
-            <table style="width:100%;border-collapse:collapse;font-size:0.72rem;">
-              ${[
-                ['Total Farms Detected', `${NATIONAL_KPI.total_farms.toLocaleString()} farms`],
-                ['Total Estimated Capacity', `${NATIONAL_KPI.total_capacity_gw} GW`],
-                ['Total Mapped Area', `~${NATIONAL_KPI.total_area_sq_km.toLocaleString()} km²`],
-                ['CO₂ Avoided (Annual)', `${NATIONAL_KPI.co2_avoided_mt} million tonnes`],
-                ['Households Powered', `${(NATIONAL_KPI.households_powered/1000000).toFixed(1)}M households`],
-                ['Model IoU Score', `${(NATIONAL_KPI.mean_iou*100).toFixed(1)}%`],
-                ['Mean F1 Score', `${(NATIONAL_KPI.mean_f1*100).toFixed(1)}%`],
-                ['Validation Method', 'Human expert review'],
-                ['LULC Conflict', `${NATIONAL_KPI.lulc_conflict}% on ecologically sensitive land`],
-              ].map(([k,v]) => `
-                <tr style="border-bottom:1px solid rgba(30,74,115,0.3);">
-                  <td style="padding:5px 8px;color:var(--text-muted);">${k}</td>
-                  <td style="padding:5px 8px;color:var(--text-primary);font-family:'JetBrains Mono',monospace;font-size:0.7rem;">${v}</td>
-                </tr>
-              `).join('')}
-            </table>
-          </div>
+  // ── Run Detection ──────────────────────────────────────────────────────────
+  let _detecting = false;
+  async function runDetection() {
+    if (_detecting) return;
+    _detecting = true;
 
-          <div class="compliance-card" style="background:rgba(239,68,68,0.04);border-color:rgba(239,68,68,0.2);">
-            <div style="font-size:0.72rem;color:var(--text-secondary);line-height:1.7;">
-              <strong style="color:var(--accent-red);">⚠ Important Legal Advisory</strong><br>
-              SolarAI outputs are for planning and analysis purposes only. Do not commence site development without:
-              <ul style="margin:6px 0 0 16px;color:var(--text-muted);">
-                <li>Environmental Clearance under EIA Notification, 2006</li>
-                <li>Forest clearance under FCA 1980 (if applicable)</li>
-                <li>State land revenue department approval</li>
-                <li>DISCOM/SLDC grid connection approval</li>
-              </ul>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  `;
-}
+    const btn  = document.getElementById('btn-detect');
+    const prog = document.getElementById('detect-progress');
+    const fill = document.getElementById('progress-fill');
+    const step = document.getElementById('progress-step');
+    const pct  = document.getElementById('progress-pct');
+    const log  = document.getElementById('ai-log');
 
-// ─── TAB SWITCHING ─────────────────────────────────────────────────────────
-function switchTab(tabId) {
-  AppState.activeTab = tabId;
+    if (btn)  { btn.disabled = true; btn.textContent = '⏳ Running…'; }
+    if (prog) prog.style.display = 'block';
+    if (log)  log.innerHTML = '';
 
-  // Update nav buttons
-  document.querySelectorAll('.nav-tab').forEach(btn => btn.classList.remove('active'));
-  const activeBtn = document.getElementById(`tab-btn-${tabId}`);
-  if (activeBtn) activeBtn.classList.add('active');
+    window.SolarAIMap.runScanAnimation();
 
-  // Show/hide overlays
-  document.querySelectorAll('.tab-content').forEach(tc => tc.classList.remove('active'));
+    let prev = 0;
+    for (let i = 0; i < DETECTION_STEPS.length; i++) {
+      const s = DETECTION_STEPS[i];
+      await sleep(s.delay - prev);
+      prev = s.delay;
+      addLog(s.msg, s.type);
+      const p = Math.round(((i+1) / DETECTION_STEPS.length) * 100);
+      if (fill) fill.style.width = p + '%';
+      if (pct)  pct.textContent  = p + '%';
+      if (step) step.textContent = s.msg.length > 40 ? s.msg.slice(0,38)+'…' : s.msg;
+    }
 
-  if (tabId === 'dashboard' || tabId === 'detection') {
-    // Show map
-  } else {
-    const tc = document.getElementById(`tab-${tabId}`);
-    if (tc) tc.classList.add('active');
+    await window.SolarAIMap.animateDetection((done, total) => {
+      if (step) step.textContent = `Scanning polygon ${done}/${total}…`;
+    });
 
-    if (tabId === 'suitability') {
-      // Rebuild to ensure fresh
-    } else if (tabId === 'change') {
-      setTimeout(() => {
-        window.SolarAICharts.renderNewFarmsBar('chart-change-bar', AppState.changeYearFrom, AppState.changeYearTo);
-        window.SolarAICharts.renderTemporalLine('chart-change-growth');
-      }, 100);
+    _detecting = false;
+    if (btn)  { btn.disabled = false; btn.textContent = '⚡ RUN DETECTION'; }
+
+    populateResultsTable();
+    document.getElementById('bottom-panel')?.classList.add('open');
+    document.getElementById('det-summary').textContent =
+      `Detection Complete — ${window.SolarAIData.SOLAR_FARMS_GEOJSON.features.length} farms, IoU 89.1%`;
+  }
+
+  function populateResultsTable() {
+    const tbody = document.getElementById('results-tbody');
+    if (!tbody) return;
+    const farms = window.SolarAIData.SOLAR_FARMS_GEOJSON.features;
+    tbody.innerHTML = farms.map(f => {
+      const p = f.properties;
+      const areaHa = (p.Area / 10000).toFixed(0);
+      const confClass = p.confidence >= 90 ? 'conf-high' : p.confidence >= 80 ? 'conf-med' : 'conf-low';
+      return `<tr id="row-${p.fid}" onclick="SolarAIMap.flyToFarm(${p.fid})">
+        <td>${p.fid}</td>
+        <td>${p.name || '—'}</td>
+        <td>${p.State}</td>
+        <td>${p.Latitude.toFixed(3)}</td>
+        <td>${p.Longitude.toFixed(3)}</td>
+        <td>${Number(areaHa).toLocaleString()}</td>
+        <td>${p.capacity_mw ? p.capacity_mw.toLocaleString() : '—'}</td>
+        <td>${p.ghi || '—'}</td>
+        <td><span class="conf-badge ${confClass}">${p.confidence.toFixed(0)}%</span></td>
+        <td>${p.model || 'SegFormer-B5'}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  // ── Tab switching ──────────────────────────────────────────────────────────
+  function switchTab(tab) {
+    _activeTab = tab;
+    // Update nav tabs
+    ['detection','suitability','change','reports'].forEach(t => {
+      const btn = document.getElementById('ntab-' + t);
+      if (btn) btn.classList.toggle('active', t === tab);
+    });
+
+    // Show/hide shell vs full-page tabs
+    const shell    = document.getElementById('app-shell');
+    const tabIds   = ['suitability','change','reports'];
+    const isTabPage = tabIds.includes(tab);
+
+    if (shell) shell.style.display = isTabPage ? 'none' : 'grid';
+
+    tabIds.forEach(t => {
+      const el = document.getElementById('tab-' + t);
+      if (!el) return;
+      el.style.display = 'none';
+      el.classList.remove('active');
+    });
+
+    if (isTabPage) {
+      const active = document.getElementById('tab-' + tab);
+      if (active) { active.style.display = 'flex'; active.classList.add('active'); }
+
+      // Render charts that need canvas to be visible
+      if (tab === 'change') {
+        setTimeout(() => window.SolarAICharts.renderNewFarmsBar('chart-new-farms',
+          parseInt(document.getElementById('cd-from')?.value || 2016),
+          parseInt(document.getElementById('cd-to')?.value   || 2023)), 100);
+      }
     }
   }
 
-  // Layer toggle for candidates
-  if (tabId === 'suitability') {
-    window.SolarAIMap.toggleLayer('candidates', true);
-    window.SolarAIMap.renderCandidateSites();
-    AppState.activeLayers.candidates = true;
-  }
-}
+  // ── Candidate site selection ───────────────────────────────────────────────
+  function selectCandidate(id) {
+    const site = window.SolarAIData.SUITABILITY_CANDIDATES.find(s => s.id === id);
+    if (!site) return;
 
-// ─── DETECTION ─────────────────────────────────────────────────────────────
-async function runDetection() {
-  if (AppState.detecting) return;
-  AppState.detecting = true;
+    // Highlight card
+    document.querySelectorAll('.suit-card').forEach(c => c.classList.remove('selected'));
+    const card = document.getElementById('sc-' + id);
+    if (card) card.classList.add('selected');
 
-  const btn = document.getElementById('btn-detect');
-  const progressWrap = document.getElementById('detect-progress');
-  const progressFill = document.getElementById('progress-fill');
-  const progressStep = document.getElementById('progress-step');
-  const progressPct  = document.getElementById('progress-pct');
-  const aiLog = document.getElementById('ai-log');
-
-  if (btn) { btn.disabled = true; btn.textContent = '⏳ Running...'; }
-  if (progressWrap) progressWrap.style.display = 'block';
-  if (aiLog) aiLog.innerHTML = '';
-
-  // Run scan overlay
-  window.SolarAIMap.runScanAnimation();
-
-  // Run log steps
-  let step = 0;
-  for (const s of DETECTION_STEPS) {
-    await sleep(s.delay - (DETECTION_STEPS[step - 1]?.delay || 0));
-    addLog(s.msg, s.type);
-    const pct = Math.round(((DETECTION_STEPS.indexOf(s) + 1) / DETECTION_STEPS.length) * 100);
-    if (progressFill) progressFill.style.width = pct + '%';
-    if (progressPct) progressPct.textContent = pct + '%';
-    if (progressStep) progressStep.textContent = s.msg.substring(0, 40) + '...';
-    step++;
-  }
-
-  // Animate polygon detection
-  await window.SolarAIMap.animateDetection((done, total) => {
-    const pct = Math.round((done / total) * 100);
-    if (progressStep) progressStep.textContent = `Scanning polygon ${done}/${total}...`;
-  });
-
-  // Show results
-  AppState.detecting = false;
-  AppState.detectionComplete = true;
-  if (btn) { btn.disabled = false; btn.textContent = '⚡ RUN DETECTION'; }
-  if (progressFill) progressFill.classList.remove('scanning');
-
-  populateResultsTable();
-  showDetectionSummary();
-  showToast('✅ Detection complete — 18 farms detected', 'success');
-}
-
-function populateResultsTable() {
-  const tbody = document.getElementById('results-tbody');
-  const countEl = document.getElementById('result-count');
-  if (!tbody) return;
-
-  const { SOLAR_FARMS_GEOJSON } = window.SolarAIData;
-  const features = SOLAR_FARMS_GEOJSON.features;
-  if (countEl) countEl.textContent = features.length;
-
-  tbody.innerHTML = features.map(f => {
-    const p = f.properties;
-    const ha = (p.Area / 10000).toFixed(0);
-    const mw = p.capacity_mw || Math.round(ha * 0.8);
-    const conf = p.confidence || 88;
-    const confCls = conf >= 90 ? 'conf-high' : conf >= 80 ? 'conf-med' : 'conf-low';
-    const confLabel = conf >= 90 ? '✓ HIGH' : conf >= 80 ? '~ MED' : '✗ LOW';
-    return `<tr onclick="App.selectFarm(${p.fid})" id="row-${p.fid}">
-      <td>SF-${String(p.fid).padStart(4,'0')}</td>
-      <td style="font-weight:500;color:var(--text-primary);">${p.name || 'Farm #'+p.fid}</td>
-      <td>${p.State}</td>
-      <td style="font-family:'JetBrains Mono',monospace;">${Number(ha).toLocaleString()}</td>
-      <td style="font-family:'JetBrains Mono',monospace;color:var(--solar);">${Number(mw).toLocaleString()}</td>
-      <td style="font-family:'JetBrains Mono',monospace;">${p.ghi || 1900}</td>
-      <td><span class="conf-badge ${confCls}">${confLabel} ${conf}%</span></td>
-      <td style="font-size:0.65rem;color:var(--text-muted);">${p.lulc_class || p.lulc || '—'}</td>
-      <td><span class="badge badge-${p.status==='Operational'?'green':'blue'}">${p.status||'Operational'}</span></td>
-    </tr>`;
-  }).join('');
-
-  // Show bottom panel
-  document.getElementById('bottom-panel').classList.add('open');
-}
-
-function showDetectionSummary() {
-  const { SOLAR_FARMS_GEOJSON } = window.SolarAIData;
-  const features = SOLAR_FARMS_GEOJSON.features;
-  const totalHa = features.reduce((s,f) => s + f.properties.Area / 10000, 0);
-  const avgConf = (features.reduce((s,f) => s + (f.properties.confidence||88), 0) / features.length).toFixed(1);
-
-  const s = document.getElementById('det-summary');
-  const detCount = document.getElementById('det-count');
-  const detArea  = document.getElementById('det-area');
-  const detConf  = document.getElementById('det-conf');
-  if (s) s.style.display = 'grid';
-  if (detCount) detCount.textContent = features.length;
-  if (detArea) detArea.textContent = Math.round(totalHa/1000)+'k ha';
-  if (detConf) detConf.textContent = avgConf+'%';
-}
-
-// ─── MODEL SELECTION ─────────────────────────────────────────────────────────
-function selectModel(name) {
-  AppState.selectedModel = name;
-  document.querySelectorAll('.model-card').forEach(c => c.classList.remove('selected'));
-  document.querySelectorAll('.model-card').forEach(c => {
-    if (c.querySelector('.model-name')?.textContent === name) c.classList.add('selected');
-  });
-
-  const { MODEL_BENCHMARKS } = window.SolarAIData;
-  const m = MODEL_BENCHMARKS.find(b => b.name === name);
-  if (m) {
-    addLog(`Model switched to ${name} — IoU: ${(m.iou*100).toFixed(1)}%, F1: ${(m.f1*100).toFixed(1)}%`, 'success');
-    addLog(`Parameters: ${m.params_m}M | Inference: ${m.inference_ms}ms/tile`, 'active');
-  }
-}
-
-// ─── LAYER TOGGLE ─────────────────────────────────────────────────────────────
-function toggleLayer(key) {
-  AppState.activeLayers[key] = !AppState.activeLayers[key];
-  const el = document.getElementById(`layer-${key}`);
-  if (el) el.classList.toggle('active', AppState.activeLayers[key]);
-
-  if (key === 'satellite') {
-    window.SolarAIMap.switchBasemap(AppState.activeLayers.satellite ? 'satellite' : 'light');
-  } else if (key === 'nightMode') {
-    window.SolarAIMap.switchBasemap(AppState.activeLayers.nightMode ? 'dark' : 'light');
-  } else {
-    if (key === 'candidates' && AppState.activeLayers.candidates) {
-      window.SolarAIMap.renderCandidateSites();
+    // Fly map (switch to detection tab first)
+    if (_activeTab === 'suitability') {
+      // Open detection briefly to fly map, then come back — or just fly silently
+      const map = window.SolarAIMap.getMap();
+      if (map) map.flyTo([site.lat, site.lng], 10, { duration: 1.2 });
     }
-    window.SolarAIMap.toggleLayer(
-      key === 'stateBounds' ? 'states' : key,
-      AppState.activeLayers[key]
-    );
-  }
-}
 
-// ─── SUITABILITY CANDIDATE SELECTION ─────────────────────────────────────────
-function selectCandidate(id) {
-  AppState.selectedCandidateId = id;
-  const { SUITABILITY_CANDIDATES } = window.SolarAIData;
-  const site = SUITABILITY_CANDIDATES.find(s => s.id === id);
-  if (!site) return;
+    // Render detail panel
+    const panel = document.getElementById('suit-detail');
+    if (!panel) return;
 
-  document.querySelectorAll('.suit-card').forEach(c => c.classList.remove('selected'));
-  const card = document.getElementById(`suit-card-${id}`);
-  if (card) card.classList.add('selected');
-
-  // Fly map to site
-  window.SolarAIMap.getMap()?.flyTo([site.lat, site.lng], 9, { duration: 1 });
-
-  // Render detail panel
-  renderCandidateDetail(site);
-}
-
-function renderCandidateDetail(site) {
-  const panel = document.getElementById('suit-detail-panel');
-  if (!panel) return;
-  const color = site.grade === 'HIGH' ? '#10b981' : site.grade === 'MEDIUM' ? '#f59e0b' : '#f97316';
-
-  panel.innerHTML = `
-    <div class="detail-header">
-      <div class="detail-site-name">${site.name}</div>
-      <div class="detail-score-row">
-        <div class="detail-score">${site.total}</div>
-        <div>
-          <div class="grade-badge grade-${site.grade}" style="font-size:0.75rem;">${site.grade} SUITABILITY</div>
-          <div style="font-size:0.62rem;color:var(--text-muted);margin-top:4px;">📍 ${site.state}</div>
+    const color = site.grade === 'HIGH' ? '#1b7a3e' : site.grade === 'MEDIUM' ? '#b45309' : '#d97706';
+    panel.innerHTML = `
+      <div class="detail-header">
+        <div class="detail-site-name">${site.name}</div>
+        <div class="detail-score-row">
+          <div class="detail-score" style="color:${color}">${site.total}</div>
+          <div>
+            <span class="grade-badge grade-${site.grade}">${site.grade} SUITABILITY</span>
+            <div style="font-size:0.67rem;color:var(--text-muted);margin-top:3px;">${site.state}</div>
+          </div>
         </div>
       </div>
-    </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:14px 0;">
+        <div class="det-metric"><span class="dm-val">${site.ghi}</span><div class="dm-label">GHI (kWh/m²/yr)</div></div>
+        <div class="det-metric"><span class="dm-val">${site.area_ha.toLocaleString()}</span><div class="dm-label">Area (ha)</div></div>
+        <div class="det-metric"><span class="dm-val">${site.capacity_mw.toLocaleString()}</span><div class="dm-label">Capacity (MW)</div></div>
+        <div class="det-metric"><span class="dm-val">${site.energy_gwh.toLocaleString()}</span><div class="dm-label">Energy (GWh/yr)</div></div>
+        <div class="det-metric"><span class="dm-val">${site.slope_deg}°</span><div class="dm-label">Slope (deg)</div></div>
+        <div class="det-metric"><span class="dm-val" style="font-size:0.75rem;">${site.flood_risk}</span><div class="dm-label">Flood Risk</div></div>
+      </div>
+      <div style="background:var(--isro-xpale);border-radius:var(--r-sm);padding:10px;margin-bottom:10px;">
+        <div style="font-size:0.67rem;font-weight:700;color:var(--isro-navy);margin-bottom:5px;">Justification</div>
+        <div style="font-size:0.73rem;color:var(--text-secondary);line-height:1.6;">${site.justification}</div>
+      </div>
+      <div>
+        <div style="font-size:0.67rem;font-weight:700;color:var(--isro-navy);margin-bottom:5px;">Key Risks</div>
+        ${site.risks.map(r => `<div style="font-size:0.71rem;color:var(--warning);padding:3px 0;border-bottom:1px solid var(--border);">⚠ ${r}</div>`).join('')}
+      </div>
+      <div style="position:relative;height:200px;margin-top:14px;">
+        <canvas id="detail-radar-${id}"></canvas>
+      </div>`;
 
-    <div class="detail-metrics-grid">
-      <div class="detail-metric"><span class="dmt-val" style="color:var(--solar);">${site.ghi}</span><div class="dmt-label">GHI kWh/m²/yr</div></div>
-      <div class="detail-metric"><span class="dmt-val" style="color:var(--accent-cyan);">${site.area_ha.toLocaleString()}</span><div class="dmt-label">Area (ha)</div></div>
-      <div class="detail-metric"><span class="dmt-val" style="color:var(--isro-blue-lt);">${site.capacity_mw.toLocaleString()} MW</span><div class="dmt-label">Est. Capacity</div></div>
-      <div class="detail-metric"><span class="dmt-val" style="color:var(--accent-green);">${site.energy_gwh.toLocaleString()} GWh</span><div class="dmt-label">Annual Energy</div></div>
-      <div class="detail-metric"><span class="dmt-val" style="color:var(--accent-teal);">${site.co2_kt.toLocaleString()} kt</span><div class="dmt-label">CO₂ Avoided/yr</div></div>
-      <div class="detail-metric"><span class="dmt-val" style="color:var(--accent-purple);">${(site.households/1000).toFixed(0)}k</span><div class="dmt-label">Households</div></div>
-    </div>
+    setTimeout(() => window.SolarAICharts.renderRadar('detail-radar-' + id, site), 100);
+  }
 
-    <div style="margin-bottom:14px;">
-      <div class="chart-title" style="margin-bottom:8px;">MCDA Sub-Scores</div>
-      <div style="height:140px;"><canvas id="radar-detail"></canvas></div>
-    </div>
+  // ── Model selection ────────────────────────────────────────────────────────
+  function selectModel(name) {
+    document.querySelectorAll('.model-card').forEach(c => c.classList.remove('selected'));
+    const id = 'mc-' + name.replace(/[^a-z]/gi, '_');
+    const el = document.getElementById(id);
+    if (el) el.classList.add('selected');
+    addLog(`Model switched to ${name}`, 'active');
+  }
 
-    <div class="detail-just">${site.justification}</div>
+  // ── Layer toggle ───────────────────────────────────────────────────────────
+  const _layerState = { solarFarms:true, ghiHeatmap:false, candidates:false, grid:false, states:true };
+  function toggleLayerUI(key) {
+    _layerState[key] = !_layerState[key];
+    const el = document.getElementById('lt-' + key);
+    if (el) el.classList.toggle('active', _layerState[key]);
+    window.SolarAIMap.toggleLayer(key, _layerState[key]);
+    if (key === 'candidates' && _layerState[key]) window.SolarAIMap.renderCandidateSites();
+  }
 
-    <div>
-      <div class="risks-title">⚠ Risk Factors</div>
-      ${site.risks.map(r => `<div class="risk-item">${r}</div>`).join('')}
-    </div>
+  // ── Source + AOI updates ──────────────────────────────────────────────────
+  function updateSource(val) {
+    const resMap = {
+      'Sentinel-2':'10m / MSI / L2A',
+      'Landsat-9':'30m / OLI-TIRS / L2A',
+      'IRS Resourcesat-2A':'24m / LISS-III',
+      'Cartosat-3':'0.25m / PAN+MS'
+    };
+    const label = document.getElementById('res-label');
+    if (label) label.textContent = (resMap[val] || '10m') + ' — ' + val;
+    addLog(`Satellite source changed to ${val}`, 'active');
+  }
 
-    <div style="margin-top:14px;padding:10px;background:rgba(29,111,164,0.08);border:1px solid rgba(29,111,164,0.2);border-radius:8px;font-size:0.68rem;color:var(--text-muted);">
-      🏗 LULC: <span style="color:var(--accent-cyan);">${site.lulc_class}</span><br>
-      🌊 Flood Risk: <span style="color:var(--solar);">${site.flood_risk}</span><br>
-      📐 Avg Slope: <span style="color:var(--accent-green);">${site.slope_deg}°</span>
-    </div>
-
-    <div style="margin-top:12px;display:flex;gap:8px;">
-      <button class="btn-detect" style="flex:1;font-size:0.75rem;padding:8px;" onclick="App.flyToState('${site.state}')">
-        🗺 View on Map
-      </button>
-      <button class="btn-secondary" style="flex:1;" onclick="App.generateReport('suitability')">
-        📄 Export
-      </button>
-    </div>
-  `;
-
-  setTimeout(() => {
-    window.SolarAICharts.renderRadar('radar-detail', site);
-  }, 50);
-}
-
-// ─── CHANGE DETECTION ────────────────────────────────────────────────────────
-function updateChangeYears() {
-  const from = parseInt(document.getElementById('year-from').value);
-  const to   = parseInt(document.getElementById('year-to').value);
-  if (from >= to) { showToast('⚠ "From" year must be before "To" year', 'warn'); return; }
-  AppState.changeYearFrom = from;
-  AppState.changeYearTo   = to;
-}
-
-function runChangeDetection() {
-  const { TEMPORAL_DATA } = window.SolarAIData;
-  const from = AppState.changeYearFrom;
-  const to   = AppState.changeYearTo;
-  const idxF = TEMPORAL_DATA.years.indexOf(from);
-  const idxT = TEMPORAL_DATA.years.indexOf(to);
-  if (idxF < 0 || idxT < 0 || idxF >= idxT) { showToast('⚠ Invalid date range', 'warn'); return; }
-
-  const newFarms = TEMPORAL_DATA.farms_detected[idxT] - TEMPORAL_DATA.farms_detected[idxF];
-  const areaKm   = TEMPORAL_DATA.area_sq_km[idxT] - TEMPORAL_DATA.area_sq_km[idxF];
-  const capGW    = TEMPORAL_DATA.national_capacity_gw[idxT] - TEMPORAL_DATA.national_capacity_gw[idxF];
-
-  document.getElementById('cs-new').textContent  = '+' + newFarms;
-  document.getElementById('cs-area').textContent = '+' + areaKm.toLocaleString() + ' km²';
-  document.getElementById('cs-cap').textContent  = '+' + capGW.toFixed(1) + ' GW';
-
-  window.SolarAICharts.renderNewFarmsBar('chart-change-bar', from, to);
-
-  showToast(`✅ Change analysis complete: ${from}→${to} (+${newFarms} farms)`, 'success');
-}
-
-// ─── FLY-TO HELPERS ──────────────────────────────────────────────────────────
-function flyToIndia() { window.SolarAIMap.getMap()?.flyTo([22.59, 80.96], 5, { duration: 1.5 }); }
-function flyToState(state) {
-  const coords = {
-    rajasthan: [27.0, 74.0, 7], karnataka: [14.5, 76.5, 8],
-    gujarat:   [22.5, 71.5, 8], andhra:    [16.5, 79.5, 8],
-    tamilnadu: [11.0, 78.5, 8], mp:        [23.5, 77.5, 8],
-    goa: [15.3, 74.1, 10],
+  const STATE_COORDS = {
+    'Rajasthan':[27.0,74.0,7], 'Gujarat':[22.5,71.5,7], 'Karnataka':[14.5,76.5,8],
+    'Tamil Nadu':[11.0,78.5,8], 'Andhra Pradesh':[16.5,79.5,8],
+    'Madhya Pradesh':[23.5,77.5,8], 'Telangana':[17.4,78.5,8],
+    'Maharashtra':[19.5,76.5,7], 'Punjab':[30.9,75.5,9], 'Haryana':[29.1,76.5,9],
+    'Odisha':[20.5,84.5,8], 'Uttar Pradesh':[27.0,80.5,7], 'Jharkhand':[23.6,85.5,8],
+    'Ladakh (UT)':[34.2,77.6,8],
   };
-  const c = coords[state] || coords.rajasthan;
-  window.SolarAIMap.getMap()?.flyTo([c[0], c[1]], c[2], { duration: 1.2 });
-}
 
-// ─── FARM SELECTION ──────────────────────────────────────────────────────────
-function selectFarm(fid) {
-  AppState.selectedFarmId = fid;
-  document.querySelectorAll('#results-tbody tr').forEach(r => r.classList.remove('selected'));
-  const row = document.getElementById(`row-${fid}`);
-  if (row) { row.classList.add('selected'); row.scrollIntoView({ behavior:'smooth', block:'nearest' }); }
-  window.SolarAIMap.flyToFarm(fid);
-}
-
-// ─── MISC APP ACTIONS ─────────────────────────────────────────────────────────
-function updateSource(val) {
-  AppState.selectedSource = val;
-  const resMap = { 'Sentinel-2':'10m / MSI / L2A', 'Landsat-9':'30m / OLI-TIRS / L2A', 'IRS Resourcesat-2A':'24m / LISS-III', 'Cartosat-3':'0.25m / PAN+MS' };
-  const label = document.getElementById('res-label');
-  if (label) label.textContent = resMap[val] || '10m';
-  addLog(`Data source changed to ${val}`, 'active');
-}
-
-function updateAOI(val) {
-  addLog(`Area of Interest set to: ${val}`, 'active');
-  flyToState(val);
-}
-
-function setMapTool(tool) {
-  document.querySelectorAll('.map-tool-btn').forEach(b => b.classList.remove('active'));
-  const btn = document.getElementById(`mt-${tool}`);
-  if (btn) btn.classList.add('active');
-}
-
-function clearResults() {
-  document.getElementById('bottom-panel')?.classList.remove('open');
-  const tbody = document.getElementById('results-tbody');
-  if (tbody) tbody.innerHTML = '';
-  AppState.detectionComplete = false;
-  const s = document.getElementById('det-summary');
-  if (s) s.style.display = 'none';
-  addLog('Results cleared. Ready for new detection run.', 'warn');
-}
-
-function toggleBottomPanel() { document.getElementById('bottom-panel')?.classList.remove('open'); }
-function onMapClick() { /* future: coordinate picker */ }
-function toggleFullscreen() {
-  if (!document.fullscreenElement) { document.documentElement.requestFullscreen?.(); }
-  else { document.exitFullscreen?.(); }
-}
-
-function exportGeoJSON() {
-  const { SOLAR_FARMS_GEOJSON } = window.SolarAIData;
-  const blob = new Blob([JSON.stringify(SOLAR_FARMS_GEOJSON, null, 2)], { type: 'application/json' });
-  downloadBlob(blob, 'solarai_detected_farms_india.geojson');
-  showToast('📦 GeoJSON exported', 'success');
-}
-
-function exportCSV() {
-  const { SOLAR_FARMS_GEOJSON } = window.SolarAIData;
-  const headers = ['FID','Name','State','Latitude','Longitude','Area_ha','Capacity_MW','GHI','Confidence','LULC','Status'];
-  const rows = SOLAR_FARMS_GEOJSON.features.map(f => {
-    const p = f.properties;
-    return [p.fid, p.name||'', p.State, p.Latitude?.toFixed(4)||'', p.Longitude?.toFixed(4)||'',
-            (p.Area/10000).toFixed(1), p.capacity_mw||'', p.ghi||'', p.confidence||'', p.lulc||'', p.status||''].join(',');
-  });
-  const csv = [headers.join(','), ...rows].join('\n');
-  downloadBlob(new Blob([csv], {type:'text/csv'}), 'solarai_results.csv');
-  showToast('📊 CSV exported', 'success');
-}
-
-function generateReport(title) {
-  showToast(`📄 Generating "${title || 'Executive Summary'}" report...`, 'success');
-  setTimeout(() => showToast('✅ Report ready — check Downloads folder (simulated)', 'success'), 2000);
-}
-
-function downloadBlob(blob, filename) {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a'); a.href = url; a.download = filename; a.click();
-  URL.revokeObjectURL(url);
-}
-
-// ─── LOGGER ──────────────────────────────────────────────────────────────────
-function addLog(msg, type = 'active') {
-  const log = document.getElementById('ai-log');
-  if (!log) return;
-  const now = new Date().toLocaleTimeString('en-IN', { hour12:false });
-  const line = document.createElement('div');
-  line.className = `log-line ${type}`;
-  line.innerHTML = `<span class="log-time">[${now}]</span><span class="log-msg">${msg}</span>`;
-  log.appendChild(line);
-  log.scrollTop = log.scrollHeight;
-}
-
-// ─── TOAST ───────────────────────────────────────────────────────────────────
-function showToast(msg, type = 'success') {
-  const existing = document.querySelector('.toast');
-  if (existing) existing.remove();
-  const toast = document.createElement('div');
-  toast.className = 'toast';
-  const icons = { success:'✅', warn:'⚠️', error:'❌', info:'ℹ️' };
-  toast.innerHTML = `<span class="toast-icon">${icons[type]||'ℹ️'}</span><span>${msg}</span>`;
-  document.body.appendChild(toast);
-  setTimeout(() => { toast.classList.add('hide'); setTimeout(() => toast.remove(), 300); }, 3500);
-}
-
-function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
-
-// ─── PUBLIC API ──────────────────────────────────────────────────────────────
-window.App = {
-  switchTab, runDetection, selectModel, toggleLayer, selectCandidate,
-  updateChangeYears, runChangeDetection, flyToIndia, flyToState,
-  selectFarm, updateSource, updateAOI, setMapTool, clearResults,
-  toggleBottomPanel, onMapClick, toggleFullscreen,
-  exportGeoJSON, exportCSV, generateReport
-};
-
-window.SolarAIApp = {
-  onMapClick, selectFarm, selectCandidate
-};
-
-// ─── BOOT ────────────────────────────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', init);
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// ─── RENDER BACKEND INTEGRATION ─────────────────────────────────────────────
-// Live API: https://solarai-api.onrender.com
-// ═══════════════════════════════════════════════════════════════════════════════
-const RENDER_API = 'https://solarai-api.onrender.com';
-
-// ── Status badge injected into navbar ─────────────────────────────────────────
-function _injectStatusBadge(alive) {
-  const nav = document.querySelector('.nav-right') || document.querySelector('nav') || document.body;
-  const existing = document.getElementById('api-status-badge');
-  if (existing) existing.remove();
-
-  const badge = document.createElement('div');
-  badge.id = 'api-status-badge';
-  badge.style.cssText = [
-    'display:inline-flex', 'align-items:center', 'gap:6px',
-    'padding:4px 10px', 'border-radius:20px', 'font-size:11px',
-    'font-weight:600', 'letter-spacing:0.4px',
-    alive
-      ? 'background:rgba(34,197,94,0.15);color:#16a34a;border:1px solid rgba(34,197,94,0.4)'
-      : 'background:rgba(239,68,68,0.12);color:#dc2626;border:1px solid rgba(239,68,68,0.3)',
-    'position:fixed', 'bottom:16px', 'left:16px', 'z-index:9999',
-    'box-shadow:0 2px 8px rgba(0,0,0,0.15)', 'cursor:pointer',
-  ].join(';');
-
-  const dot = alive ? '🟢' : '🔴';
-  const label = alive ? 'Backend Live' : 'Backend Offline';
-  badge.innerHTML = `${dot} <span>${label}</span>`;
-  badge.title = alive
-    ? `API: ${RENDER_API}/docs`
-    : 'Using static data. Backend may be sleeping (Render free tier).';
-
-  if (alive) badge.onclick = () => window.open(`${RENDER_API}/docs`, '_blank');
-  document.body.appendChild(badge);
-}
-
-// ── Fetch live solar farms from Render API ────────────────────────────────────
-async function _loadBackendFarms(state = null) {
-  let url = `${RENDER_API}/api/solar-farms/?limit=5000`;
-  if (state) url += `&state=${encodeURIComponent(state)}`;
-  const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
-  if (!res.ok) throw new Error('Non-200 from API');
-  return res.json();
-}
-
-// ── Fetch live suitable sites from Render API ─────────────────────────────────
-async function _loadBackendSites(state = null) {
-  let url = `${RENDER_API}/api/suitable-sites/?limit=2000&min_score=0.65`;
-  if (state) url += `&state=${encodeURIComponent(state)}`;
-  const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
-  if (!res.ok) throw new Error('Non-200 from API');
-  return res.json();
-}
-
-// ── Render backend markers on map ─────────────────────────────────────────────
-function _paintBackendFarms(features) {
-  const mapObj = window.SolarAIMap?.getMap?.();
-  if (!mapObj) return;
-
-  // Remove old backend layer if exists
-  if (mapObj.getLayer?.('backend-farms')) {
-    mapObj.removeLayer('backend-farms');
-    mapObj.removeSource('backend-farms');
-  }
-
-  // Use Leaflet if SolarAIMap exposes it
-  const lMap = window._leafletMap;
-  if (!lMap) return;
-
-  if (window._backendFarmLayer) window._backendFarmLayer.clearLayers();
-  else window._backendFarmLayer = L.layerGroup().addTo(lMap);
-
-  features.forEach(f => {
-    const geom = f.geometry;
-    if (!geom) return;
-    let latLng;
-    if (geom.type === 'Point') {
-      latLng = [geom.coordinates[1], geom.coordinates[0]];
-    } else if (geom.type === 'Polygon' || geom.type === 'MultiPolygon') {
-      const ring = geom.type === 'Polygon' ? geom.coordinates[0] : geom.coordinates[0][0];
-      const lats = ring.map(c => c[1]), lons = ring.map(c => c[0]);
-      latLng = [lats.reduce((a,b)=>a+b,0)/lats.length, lons.reduce((a,b)=>a+b,0)/lons.length];
-    } else return;
-
-    const p = f.properties;
-    L.circleMarker(latLng, {
-      radius: 8, color: '#15803d', fillColor: '#22c55e', fillOpacity: 0.85, weight: 2,
-    })
-      .bindPopup(`
-        <div style="font-family:system-ui;font-size:13px;min-width:210px">
-          <b style="color:#15803d">✅ Existing Solar Farm</b>
-          <hr style="margin:5px 0"/>
-          <b>${p.name || 'Solar Farm'}</b><br/>
-          📍 ${p.state || '—'} › ${p.district || '—'}<br/>
-          📐 Area: <b>${p.area_ha || '—'} ha</b><br/>
-          ⚡ Capacity: <b>${p.capacity_mw || '—'} MW</b><br/>
-          🎯 Confidence: <b>${p.confidence ? (p.confidence*100).toFixed(0)+'%' : '—'}</b><br/>
-          🛰️ Source: ${p.satellite_source || 'Sentinel-2'}
-        </div>`)
-      .addTo(window._backendFarmLayer);
-  });
-  showToast(`🛰️ Loaded ${features.length} farms from live API`, 'success');
-}
-
-function _paintBackendSites(features) {
-  const lMap = window._leafletMap;
-  if (!lMap) return;
-
-  if (window._backendSiteLayer) window._backendSiteLayer.clearLayers();
-  else window._backendSiteLayer = L.layerGroup().addTo(lMap);
-
-  features.forEach(f => {
-    const geom = f.geometry;
-    if (!geom || geom.type !== 'Point') return;
-    const latLng = [geom.coordinates[1], geom.coordinates[0]];
-    const p = f.properties;
-    L.circleMarker(latLng, {
-      radius: 7, color: '#c2410c', fillColor: '#f97316', fillOpacity: 0.8, weight: 1.5,
-    })
-      .bindPopup(`
-        <div style="font-family:system-ui;font-size:13px;min-width:210px">
-          <b style="color:#c2410c">🟠 Recommended Site</b>
-          <hr style="margin:5px 0"/>
-          📍 ${p.state || '—'} › ${p.district || '—'}<br/>
-          ⭐ Score: <b>${p.suitability_score ? (p.suitability_score*100).toFixed(0)+'%' : '—'}</b><br/>
-          ☀️ Irradiance: <b>${p.solar_irradiance || '—'} kWh/m²/day</b><br/>
-          🏔️ Slope: <b>${p.slope_deg || '—'}°</b><br/>
-          🌿 Land: ${p.land_use || '—'}<br/>
-          🔌 Grid dist: <b>${p.grid_distance_km || '—'} km</b><br/>
-          ⚡ Est. Capacity: <b>${p.recommended_capacity_mw || '—'} MW</b>
-        </div>`)
-      .addTo(window._backendSiteLayer);
-  });
-}
-
-// ── State filter wired to live API ────────────────────────────────────────────
-async function filterByStateFromAPI(state) {
-  const apiState = (state && state !== 'all' && state !== 'All India') ? state : null;
-
-  showToast('🔄 Fetching from live backend…', 'info');
-
-  // Auto-zoom
-  if (apiState) {
-    try {
-      const bboxRes = await fetch(`${RENDER_API}/api/states/${encodeURIComponent(apiState)}/bbox`,
-        { signal: AbortSignal.timeout(5000) });
-      const bboxData = await bboxRes.json();
-      if (bboxData.bbox) {
-        const [xmin, ymin, xmax, ymax] = bboxData.bbox;
-        window._leafletMap?.fitBounds([[ymin, xmin], [ymax, xmax]], { padding: [40, 40] });
-      }
-    } catch { /* zoom failure is non-fatal */ }
-  } else {
-    window._leafletMap?.setView([20.5937, 78.9629], 5);
-  }
-
-  const [farmsData, sitesData] = await Promise.all([
-    _loadBackendFarms(apiState),
-    _loadBackendSites(apiState),
-  ]);
-
-  _paintBackendFarms(farmsData.features || []);
-  _paintBackendSites(sitesData.features || []);
-
-  addLog(`Backend filter: ${apiState || 'All India'} → ${(farmsData.features||[]).length} farms, ${(sitesData.features||[]).length} sites`, 'success');
-}
-
-// ── Add map legend ─────────────────────────────────────────────────────────────
-function _addMapLegend() {
-  const legend = document.createElement('div');
-  legend.id = 'map-legend-overlay';
-  legend.style.cssText = [
-    'position:fixed', 'bottom:70px', 'left:16px', 'z-index:999',
-    'background:rgba(255,255,255,0.95)', 'padding:10px 14px',
-    'border-radius:10px', 'box-shadow:0 2px 10px rgba(0,0,0,0.15)',
-    'font-size:12px', 'font-family:system-ui', 'line-height:2',
-    'border:1px solid rgba(0,0,0,0.08)',
-  ].join(';');
-  legend.innerHTML = `
-    <b style="display:block;margin-bottom:2px;color:#1e293b">Map Legend</b>
-    <span style="color:#22c55e;font-size:17px">●</span>&nbsp; Existing Solar Farm<br/>
-    <span style="color:#f97316;font-size:17px">●</span>&nbsp; Suitable Site (Recommended)
-  `;
-  document.body.appendChild(legend);
-}
-
-// ── Detect and expose Leaflet map instance ─────────────────────────────────────
-function _detectLeafletMap() {
-  // Try common patterns used in map.js
-  if (window._leafletMap) return window._leafletMap;
-  const containers = document.querySelectorAll('.leaflet-container');
-  if (containers.length > 0) {
-    for (const [key, val] of Object.entries(window)) {
-      if (val && typeof val === 'object' && val._container === containers[0]) {
-        window._leafletMap = val;
-        return val;
-      }
+  function updateAOI(val) {
+    const map = window.SolarAIMap.getMap();
+    if (!map) return;
+    if (!val) {
+      map.flyTo([22.5937, 80.9629], 5, { duration: 1.2 });
+      addLog('AOI: All India', 'active');
+    } else {
+      const c = STATE_COORDS[val] || [22.5, 80.0, 7];
+      map.flyTo([c[0], c[1]], c[2], { duration: 1.2 });
+      addLog(`AOI: ${val}`, 'active');
+    }
+    // Async backend filter (non-blocking)
+    if (window._backendAlive && typeof filterByStateFromAPI === 'function') {
+      filterByStateFromAPI(val || null).catch(() => {});
     }
   }
-  return null;
-}
 
-// ── Main backend bootstrap ─────────────────────────────────────────────────────
-async function initBackendIntegration() {
-  // Wait for map to be ready
-  await new Promise(r => setTimeout(r, 1500));
+  // ── Map tools ─────────────────────────────────────────────────────────────
+  function setMapTool(tool) {
+    document.querySelectorAll('.map-tool-btn').forEach(b => b.classList.remove('active'));
+    const btn = document.getElementById('mt-' + tool);
+    if (btn) btn.classList.add('active');
+  }
 
-  _detectLeafletMap();
+  function toggleFullscreen() {
+    if (!document.fullscreenElement) document.documentElement.requestFullscreen?.();
+    else document.exitFullscreen?.();
+  }
 
-  // Expose filterByStateFromAPI globally for AOI dropdown
-  window.App.filterByStateFromAPI = filterByStateFromAPI;
+  // ── Change chart ───────────────────────────────────────────────────────────
+  function updateChangeChart() {
+    const from = parseInt(document.getElementById('cd-from')?.value || 2016);
+    const to   = parseInt(document.getElementById('cd-to')?.value   || 2023);
+    if (from < to) window.SolarAICharts.renderNewFarmsBar('chart-new-farms', from, to);
+  }
 
-  // Health check
-  let alive = false;
-  try {
-    const r = await fetch(`${RENDER_API}/health`, { signal: AbortSignal.timeout(8000) });
-    alive = r.ok;
-  } catch { alive = false; }
+  // ── Export ─────────────────────────────────────────────────────────────────
+  function exportGeoJSON() {
+    const blob = new Blob([JSON.stringify(window.SolarAIData.SOLAR_FARMS_GEOJSON, null, 2)], { type:'application/json' });
+    _downloadBlob(blob, 'solarai_detected_farms_india.geojson');
+    showToast('📦 GeoJSON exported', 'success');
+  }
 
-  _injectStatusBadge(alive);
-  _addMapLegend();
+  function exportCSV() {
+    const headers = ['FID','Name','State','Lat','Lon','Area_ha','Capacity_MW','GHI','Confidence','Model'];
+    const rows = window.SolarAIData.SOLAR_FARMS_GEOJSON.features.map(f => {
+      const p = f.properties;
+      return [p.fid, p.name||'', p.State, p.Latitude, p.Longitude,
+              (p.Area/10000).toFixed(1), p.capacity_mw||'', p.ghi||'', p.confidence||'', p.model||''].join(',');
+    });
+    const csv = [headers.join(','), ...rows].join('\n');
+    _downloadBlob(new Blob([csv], {type:'text/csv'}), 'solarai_results.csv');
+    showToast('📊 CSV exported', 'success');
+  }
 
-  if (alive) {
-    addLog('✅ Render backend connected: ' + RENDER_API, 'success');
-    // Load all-India data from API on start
+  function generateReport(title) {
+    showToast(`📄 Generating "${title || 'Executive Summary'}" report…`, 'success');
+    setTimeout(() => showToast('✅ Report ready — check Downloads folder', 'success'), 2200);
+  }
+
+  function _downloadBlob(blob, name) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = name; a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  // ── Logger ─────────────────────────────────────────────────────────────────
+  function addLog(msg, type = 'active') {
+    const log = document.getElementById('ai-log');
+    if (!log) return;
+    const now  = new Date().toLocaleTimeString('en-IN', { hour12:false });
+    const line = document.createElement('div');
+    line.className = 'log-line ' + type;
+    line.innerHTML = `<span class="log-time">[${now}]</span><span class="log-msg"> ${msg}</span>`;
+    log.appendChild(line);
+    log.scrollTop = log.scrollHeight;
+    // Keep max 40 lines
+    while (log.children.length > 40) log.removeChild(log.firstChild);
+  }
+
+  // ── Toast ──────────────────────────────────────────────────────────────────
+  function showToast(msg, type = 'success') {
+    const old = document.querySelector('.toast');
+    if (old) old.remove();
+    const toast = document.createElement('div');
+    toast.className = 'toast';
+    const icons = { success:'✅', warn:'⚠️', error:'❌', info:'ℹ️' };
+    toast.innerHTML = `<span class="toast-icon">${icons[type]||'ℹ️'}</span><span>${msg}</span>`;
+    document.body.appendChild(toast);
+    setTimeout(() => { toast.classList.add('hide'); setTimeout(() => toast.remove(), 320); }, 3500);
+  }
+
+  // ── selectFarm / onMapClick ────────────────────────────────────────────────
+  function selectFarm(fid) {
+    document.querySelectorAll('#results-tbody tr').forEach(r => r.classList.remove('selected'));
+    const row = document.getElementById('row-' + fid);
+    if (row) { row.classList.add('selected'); row.scrollIntoView({ behavior:'smooth', block:'nearest' }); }
+  }
+
+  function onMapClick() { /* deselect / future picker */ }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // ─── RENDER BACKEND INTEGRATION (Render.com live API) ─────────────────────
+  // ═══════════════════════════════════════════════════════════════════════════
+  const RENDER_API = 'https://solarai-api.onrender.com';
+  window._backendAlive = false;
+
+  async function _loadBackendFarms(state) {
+    let url = `${RENDER_API}/api/solar-farms/?limit=5000`;
+    if (state) url += `&state=${encodeURIComponent(state)}`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
+    if (!res.ok) throw new Error('API ' + res.status);
+    return res.json();
+  }
+
+  async function _loadBackendSites(state) {
+    let url = `${RENDER_API}/api/suitable-sites/?limit=2000&min_score=0.65`;
+    if (state) url += `&state=${encodeURIComponent(state)}`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
+    if (!res.ok) throw new Error('API ' + res.status);
+    return res.json();
+  }
+
+  function _paintBackendFarms(features) {
+    const lMap = window._leafletMap;
+    if (!lMap) return;
+    if (window._backendFarmLayer) window._backendFarmLayer.clearLayers();
+    else window._backendFarmLayer = L.layerGroup().addTo(lMap);
+
+    features.forEach(f => {
+      const geom = f.geometry; if (!geom) return;
+      let latLng;
+      if (geom.type === 'Point') {
+        latLng = [geom.coordinates[1], geom.coordinates[0]];
+      } else if (geom.type === 'Polygon' || geom.type === 'MultiPolygon') {
+        const ring = geom.type === 'Polygon' ? geom.coordinates[0] : geom.coordinates[0][0];
+        const lats = ring.map(c=>c[1]), lons = ring.map(c=>c[0]);
+        latLng = [lats.reduce((a,b)=>a+b,0)/lats.length, lons.reduce((a,b)=>a+b,0)/lons.length];
+      } else return;
+      const p = f.properties;
+      L.circleMarker(latLng, { radius:8, color:'#15803d', fillColor:'#22c55e', fillOpacity:0.85, weight:2 })
+        .bindPopup(`<div style="font-family:system-ui;font-size:13px;min-width:200px">
+          <b style="color:#15803d">✅ API Farm</b><hr style="margin:5px 0"/>
+          <b>${p.name||'Solar Farm'}</b><br/>
+          📍 ${p.state||'—'} › ${p.district||'—'}<br/>
+          ⚡ ${p.capacity_mw||'—'} MW &nbsp; 📐 ${p.area_ha||'—'} ha
+        </div>`)
+        .addTo(window._backendFarmLayer);
+    });
+  }
+
+  function _paintBackendSites(features) {
+    const lMap = window._leafletMap;
+    if (!lMap) return;
+    if (window._backendSiteLayer) window._backendSiteLayer.clearLayers();
+    else window._backendSiteLayer = L.layerGroup().addTo(lMap);
+
+    features.forEach(f => {
+      const geom = f.geometry;
+      if (!geom || geom.type !== 'Point') return;
+      const latLng = [geom.coordinates[1], geom.coordinates[0]];
+      const p = f.properties;
+      L.circleMarker(latLng, { radius:7, color:'#c2410c', fillColor:'#f97316', fillOpacity:0.8, weight:1.5 })
+        .bindPopup(`<div style="font-family:system-ui;font-size:13px;min-width:200px">
+          <b style="color:#c2410c">🟠 Suitable Site</b><hr style="margin:5px 0"/>
+          📍 ${p.state||'—'} › ${p.district||'—'}<br/>
+          ⭐ Score: ${p.suitability_score?(p.suitability_score*100).toFixed(0)+'%':'—'}<br/>
+          ☀️ ${p.solar_irradiance||'—'} kWh/m²/day &nbsp; ⚡ ${p.recommended_capacity_mw||'—'} MW
+        </div>`)
+        .addTo(window._backendSiteLayer);
+    });
+  }
+
+  function _injectStatusBadge(alive) {
+    const old = document.getElementById('api-status-badge');
+    if (old) old.remove();
+    const b = document.createElement('div');
+    b.id = 'api-status-badge';
+    b.style.cssText = [
+      'position:fixed','bottom:16px','left:16px','z-index:9999',
+      'display:inline-flex','align-items:center','gap:6px',
+      'padding:5px 11px','border-radius:20px','font-size:11px','font-weight:600',
+      'box-shadow:0 2px 8px rgba(0,0,0,0.2)','cursor:pointer',
+      alive
+        ? 'background:rgba(34,197,94,0.15);color:#16a34a;border:1px solid rgba(34,197,94,0.4);'
+        : 'background:rgba(239,68,68,0.1);color:#dc2626;border:1px solid rgba(239,68,68,0.3);'
+    ].join(';');
+    b.innerHTML = (alive ? '🟢' : '🔴') + ` <span>${alive ? 'Backend Live' : 'Backend Offline'}</span>`;
+    b.title = alive ? `Click to open API docs: ${RENDER_API}/docs` : 'Render free tier may be sleeping (cold start ~30s)';
+    if (alive) b.onclick = () => window.open(`${RENDER_API}/docs`, '_blank');
+    document.body.appendChild(b);
+  }
+
+  // Publicly available for AOI filter
+  async function filterByStateFromAPI(state) {
+    const apiState = (state && state !== 'all' && state !== '') ? state : null;
     try {
       const [farmsData, sitesData] = await Promise.all([
-        _loadBackendFarms(null),
-        _loadBackendSites(null),
+        _loadBackendFarms(apiState),
+        _loadBackendSites(apiState),
       ]);
       _paintBackendFarms(farmsData.features || []);
       _paintBackendSites(sitesData.features || []);
-      addLog(`📡 Live data loaded: ${(farmsData.features||[]).length} farms, ${(sitesData.features||[]).length} suitable sites`, 'success');
+      addLog(`API filter: ${apiState||'All India'} → ${(farmsData.features||[]).length} farms, ${(sitesData.features||[]).length} sites`, 'success');
     } catch (err) {
-      addLog('⚠️ Data fetch failed: ' + err.message, 'warn');
+      addLog('Backend filter failed: ' + err.message, 'warn');
     }
-  } else {
-    addLog('⚠️ Backend offline or starting up (Render free tier sleeps). Using static data.', 'warn');
   }
-}
 
-// Patch updateAOI to also call the backend filter
-const _origUpdateAOI = window.App.updateAOI || updateAOI;
-window.App.updateAOI = async function(val) {
-  _origUpdateAOI(val);
-  try { await filterByStateFromAPI(val); } catch { /* backend offline, ignore */ }
-};
+  async function initBackendIntegration() {
+    let alive = false;
+    try {
+      const r = await fetch(`${RENDER_API}/health`, { signal: AbortSignal.timeout(8000) });
+      alive = r.ok;
+    } catch { alive = false; }
 
-// Boot after DOMContentLoaded
-document.addEventListener('DOMContentLoaded', () => setTimeout(initBackendIntegration, 800));
+    window._backendAlive = alive;
+    _injectStatusBadge(alive);
 
+    if (alive) {
+      addLog('✅ Render backend connected: ' + RENDER_API, 'success');
+      try {
+        const [farmsData, sitesData] = await Promise.all([
+          _loadBackendFarms(null), _loadBackendSites(null),
+        ]);
+        _paintBackendFarms(farmsData.features || []);
+        _paintBackendSites(sitesData.features || []);
+        addLog(`📡 Loaded ${(farmsData.features||[]).length} farms + ${(sitesData.features||[]).length} sites from live API`, 'success');
+      } catch (err) {
+        addLog('Data fetch failed: ' + err.message, 'warn');
+      }
+    } else {
+      addLog('⚠ Backend offline / sleeping. Using static data.', 'warn');
+    }
+  }
+
+  // ── DOMContentLoaded boot ──────────────────────────────────────────────────
+  document.addEventListener('DOMContentLoaded', boot);
+
+  // ── Public API ─────────────────────────────────────────────────────────────
+  return {
+    switchTab, selectFarm, selectCandidate, onMapClick,
+    runDetection, updateChangeChart, selectModel,
+    toggleLayerUI, updateSource, updateAOI,
+    setMapTool, toggleFullscreen, addLog, showToast,
+    exportGeoJSON, exportCSV, generateReport,
+    filterByStateFromAPI,
+  };
+
+})();
